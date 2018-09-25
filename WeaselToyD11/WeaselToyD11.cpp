@@ -197,6 +197,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wParam)
 		{
 			case 'R':
+			case VK_F5:
 				ReloadShaders();
 				break;
 		}
