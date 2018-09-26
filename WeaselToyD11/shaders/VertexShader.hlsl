@@ -3,12 +3,17 @@
 //--------------------------------------------------------------------------------------
 cbuffer cbNeverChanges : register ( b0 )
 {
-	float4 Col1;
+	float4 Resolution;
 };
 
 cbuffer cbChangesEveryFrame : register ( b1 )
 {
-	float4 Col2;
+	float4	 Mouse;
+	float4   Date;
+	float    Time;
+	float    TimeDelta;
+	int		 Frame;
+	int		 Padding;
 };
 
 

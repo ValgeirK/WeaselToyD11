@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stddef.h>
+#include <ctime>
 
 #include <windows.h>
 #include <d3d11.h>
@@ -21,12 +22,17 @@ struct SimpleVertex
 
 struct CBNeverChanges
 {
-	DirectX::XMFLOAT4 Col1;
+	DirectX::XMFLOAT4 Resolution;
 };
 
 struct CBChangesEveryFrame
 {
-	DirectX::XMFLOAT4 Col2;
+	DirectX::XMFLOAT4 Mouse;
+	DirectX::XMFLOAT4 Date;
+	float             Time;
+	float             TimeDelta;
+	int			      Frame;
+	int			      Padding;
 };
 
 
@@ -80,6 +86,8 @@ ID3D11Buffer*               g_pCBChangesEveryFrame = nullptr;
 
 // Demo
 DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
+DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
+int						    g_vFrame = 0;
 
 
 //--------------------------------------------------------------------------------------
@@ -200,8 +208,78 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			case VK_F5:
 				ReloadShaders();
 				break;
+			case VK_ESCAPE:
+				DestroyWindow(hWnd);
+				break;
 		}
 		break;
+	case WM_LBUTTONDOWN:
+	{
+		// Capture mouse input
+		SetCapture(hWnd);
+
+		g_vMouse.z = 1.0f;
+
+		// Retrieve the screen coordinates of the client area, 
+        // and convert them into client coordinates.
+		RECT rcClient;
+		POINT ptClientUL;
+		POINT ptClientLR;
+		GetClientRect(hWnd, &rcClient);
+
+		ptClientUL.x = rcClient.left;
+		ptClientUL.y = rcClient.top;
+
+		// Add one to the right and bottom sides, because the 
+		// coordinates retrieved by GetClientRect do not 
+		// include the far left and lowermost pixels. 
+		ptClientLR.x = rcClient.right + 1;
+		ptClientLR.y = rcClient.bottom + 1;
+
+		ClientToScreen(hWnd, &ptClientUL);
+		ClientToScreen(hWnd, &ptClientLR);
+
+		// Copy the client coordinates of the client area 
+		// to the rcClient structure. Confine the mouse cursor 
+		// to the client area by passing the rcClient structure 
+		// to the ClipCursor function. 
+		SetRect(&rcClient, ptClientUL.x, ptClientUL.y,
+			ptClientLR.x, ptClientLR.y);
+		ClipCursor(&rcClient);
+
+		break;
+	}
+	case WM_RBUTTONDOWN:
+	{
+		g_vMouse.w = 1.0f;
+		break;
+	}
+	case WM_MOUSEMOVE:
+	{
+		if (wParam & MK_LBUTTON)
+		{
+			POINTS pts = MAKEPOINTS(lParam);
+			g_vMouse.x = pts.x;
+			g_vMouse.y = pts.y;
+		}
+		break;
+	}
+	case WM_LBUTTONUP:
+	{
+		// Release mouse
+		ReleaseCapture();
+
+		ClipCursor(NULL);
+
+		g_vMouse.z = 0.0f;
+
+		break;
+	}
+	case WM_RBUTTONUP:
+	{
+		g_vMouse.w = 0.0f;
+		break;
+	}
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
@@ -480,6 +558,11 @@ HRESULT InitDevice()
 	if (FAILED(hr))
 		return hr;
 
+	// Set constant buffers
+	CBNeverChanges cbNC;
+	cbNC.Resolution = DirectX::XMFLOAT4(width, height, 1.0f, 1.0f);
+	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
+
 	return S_OK;
 }
 
@@ -489,6 +572,15 @@ HRESULT InitDevice()
 //--------------------------------------------------------------------------------------
 void Render()
 {
+	// Get time
+	static time_t first = time(0);
+	time_t now = time(0);
+	struct tm ltm;
+	localtime_s(&ltm, &now);
+	int hour = 1 + ltm.tm_hour;
+	int min = 1 + ltm.tm_min;
+	int sec = 1 + ltm.tm_sec;
+
 	// Update our time
 	static float t = 0.0f;
 	if (g_driverType == D3D_DRIVER_TYPE_REFERENCE)
@@ -504,11 +596,6 @@ void Render()
 		t = (timeCur - timeStart) / 1000.0f;
 	}
 
-	// Modify the color
-	g_vMeshColor.x = (sinf(t * 1.0f) + 1.0f) * 0.5f;
-	g_vMeshColor.y = (cosf(t * 3.0f) + 1.0f) * 0.5f;
-	g_vMeshColor.z = (sinf(t * 5.0f) + 1.0f) * 0.5f;
-
 	// Clear the back buffer 
 	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, DirectX::Colors::MidnightBlue);
 
@@ -516,7 +603,16 @@ void Render()
 	// Update variables that change once per frame
 	//
 	CBChangesEveryFrame cb;
-	cb.Col2 = g_vMeshColor;
+	cb.Frame = g_vFrame++;
+	cb.TimeDelta = (float)t;
+	cb.Mouse = g_vMouse;
+	cb.Time = now - first;
+
+	cb.Date.x = (float)(1970 + ltm.tm_year);
+	cb.Date.y = (float)(1 + ltm.tm_mon);
+	cb.Date.z = (float)(ltm.tm_mday);
+	cb.Date.w = (float)(((hour * 60 + min) * 60) + sec);
+
 	g_pImmediateContext->UpdateSubresource(g_pCBChangesEveryFrame, 0, nullptr, &cb, 0, 0);
 
 	// Render a triangle
@@ -524,6 +620,9 @@ void Render()
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
 
 	// Set constant buffers
+	g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
+	g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
+
 	g_pImmediateContext->PSSetConstantBuffers(1, 1, &g_pCBChangesEveryFrame);
 
 	// Texture
