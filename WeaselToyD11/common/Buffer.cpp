@@ -118,6 +118,54 @@ HRESULT Buffer::InitBuffer(
 	return hr;
 }
 
+HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVertShader, const int index)
+{
+	HRESULT hr = S_OK;
+
+	const char* channelPath = "";
+	const WCHAR* pixelShaderPath = (wchar_t *)malloc(sizeof(wchar_t) * 100);
+
+	switch (index)
+	{
+	case 0:
+		channelPath = "channels/channelsA.txt";
+		pixelShaderPath = L"shaders/PixelShaderBufferA.hlsl";
+		break;
+	case 1:
+		channelPath = "channels/channelsB.txt";
+		pixelShaderPath = L"shaders/PixelShaderBufferB.hlsl";
+		break;
+	case 2:
+		channelPath = "channels/channelsC.txt";
+		pixelShaderPath = L"shaders/PixelShaderBufferC.hlsl";
+		break;
+	case 3:
+		channelPath = "channels/channelsD.txt";
+		pixelShaderPath = L"shaders/PixelShaderBufferD.hlsl";
+		break;
+	}
+
+	mpVertexShader = pVertShader;
+
+	// Compile the pixel shader
+	ID3DBlob* pPSBufferBlob = nullptr;
+	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob);
+	if (FAILED(hr))
+	{
+		MessageBox(nullptr,
+			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+		return hr;
+	}
+
+	// Create the pixel shader
+	hr = pd3dDevice->CreatePixelShader(pPSBufferBlob->GetBufferPointer(), pPSBufferBlob->GetBufferSize(), nullptr, &mpPixelShader);
+	pPSBufferBlob->Release();
+	if (FAILED(hr))
+		return hr;
+
+	return hr;
+}
+
 void Buffer::SetShaderResource(ID3D11DeviceContext* pImmediateContext, const int index)
 {
 	pImmediateContext->PSSetShaderResources(index, 1, &mShaderResourceView);

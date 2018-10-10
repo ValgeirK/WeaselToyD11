@@ -95,13 +95,16 @@ DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
 ImGuiWindowFlags			g_window_flags = 0;
 float				        g_vLastT = 0.0f;
-ULONGLONG			        g_vPauseT = 0;
+float						g_deltaT = 0.0f;
+float						g_gameT = 0.0f;
+float						g_vPauseT = 0;
 int						    g_vFrame = 0;
 bool			            g_vPause = false;
 ImVec4						g_clear_color = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
 int							g_pressIdentifier = 0;
 int							g_padding = 0;
 bool					    g_trackMouse = false;
+float						g_playSpeed = 1.0f;
 
 
 
@@ -722,8 +725,6 @@ void Render()
 			g_Resource[i].buffers.Render(g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), width, height, i);
 			g_Resource[i].buffers.SetShaderResource(g_pImmediateContext, i);
 		}
-		//else
-			//g_pImmediateContext->PSSetShaderResources()
 	}
 
 	// Set the shaders
@@ -752,7 +753,7 @@ void Render()
 		ULONGLONG timeCur = GetTickCount64();
 
 		if (g_vPause)
-			g_vPauseT = timeCur - (ULONGLONG)(g_vLastT * 1000.0f) - timeStart ;
+			g_vPauseT = (float)(timeCur - (ULONGLONG)(g_vLastT * 1000.0f) - timeStart);
 
 		if (timeStart == 0)
 			timeStart = timeCur;
@@ -767,17 +768,23 @@ void Render()
 	//
 	CBChangesEveryFrame cb;
 	cb.Frame = g_vFrame++;
-	cb.TimeDelta = (float)t;
 	if(g_trackMouse)
 		cb.Mouse = g_vMouse;
 	else
 		cb.Mouse = DirectX::XMFLOAT4(g_vMouse.x, g_vMouse.y, 0.0f, 0.0f);
-	cb.Time = !g_vPause ? t : g_vLastT;
+
+	g_deltaT = !g_vPause ? t - g_vLastT : 0.0f;
 
 	if (!g_vPause)
 		g_vLastT = t;
 
-	cb.Date.x = (float)(1970 + ltm.tm_year);
+	g_deltaT *= g_playSpeed;
+
+	g_gameT += !g_vPause ? g_deltaT : 0.0f;
+	cb.TimeDelta = g_deltaT;
+	cb.Time = g_gameT;
+
+	cb.Date.x = (float)(1900 + ltm.tm_year);
 	cb.Date.y = (float)(1 + ltm.tm_mon);
 	cb.Date.z = (float)(ltm.tm_mday);
 	cb.Date.w = (float)(((hour * 60 + min) * 60) + sec);
@@ -874,11 +881,51 @@ void ImGuiSetup(HINSTANCE hInstance)
 	if (ImGui::IsItemHovered())
 		g_trackMouse = false;
 
+	{
+		ImGui::Begin("Control Panel");       
+
+		if (ImGui::Button("Stop", ImVec2(100.0f, 25.0f)))
+		{
+			g_vPause = true;
+			g_gameT = 0.0f;
+		}
+		ImGui::SameLine();
+		const char* playButtonLabel = "Pause";
+		if (g_vPause)
+			playButtonLabel = "Play";
+
+		if (ImGui::Button(playButtonLabel, ImVec2(100.0f, 25.0f)))
+			g_vPause = !g_vPause;
+		
+		ImGui::SameLine();
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		ImGui::PushItemWidth(150.0f);
+		ImGui::Text("Play Speed:");
+		ImGui::PopItemWidth();
+
+		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+		if (ImGui::Button("Reload Shaders", ImVec2(200.0f + ItemSpacing, 25.0f)))
+		{
+			ReloadShaders();
+		}
+
+		ImGui::SameLine();
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		ImGui::PushItemWidth(150.0f);
+		ImGui::InputFloat("playback", &g_playSpeed, 0.01f);
+		ImGui::PopItemWidth();
+
+		ImGui::Separator();
+		ImGui::ColorEdit3("clear color", (float*)&g_clear_color); // Edit 3 floats representing a color
+
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::End();
+	}
+
 	// Constant buffer Data
 	{
-		ImGui::Begin("Constant Buffer Info258");
-		static float resol2[2] = { 1920, 1080 };
-		ImGui::DragFloat2("", resol2);
+		ImGui::Begin("Constant Buffer Info");
 
 		ImGui::Separator();
 		ImGui::Separator();
@@ -889,8 +936,10 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 		ImGui::Text("Resolution:");
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		D3D11_TEXTURE2D_DESC desc = {};
+		g_mRenderTargetTexture->GetDesc(&desc);
 		ImGui::PushItemWidth(150.0f);
-		//ImGui::DragInt2("", resol);
+		ImGui::Text("%u x %u", (int)desc.Width, (int)desc.Height);
 		ImGui::PopItemWidth();
 
 		ImGui::Spacing();
@@ -898,59 +947,190 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 		ImGui::Text("BufferA:");
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		static int resBufferA[2] = { (int)g_Resource[0].channelRes.x, (int)g_Resource[0].channelRes.y };
 		ImGui::PushItemWidth(150.0f);
-		static const char * plable = "a";
-		ImGui::InputInt2(plable, resBufferA);
+		ImGui::Text("%u x %u", (int)g_Resource[0].channelRes.x, (int)g_Resource[0].channelRes.y);
 		ImGui::PopItemWidth();
 
-/*		ImGui::Text("BufferB:");
+		ImGui::Text("BufferB:");
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		static int resBufferB[2] = { (int)g_Resource[1].channelRes.x, (int)g_Resource[1].channelRes.y };
 		ImGui::PushItemWidth(150.0f);
-		ImGui::InputInt2("", resBufferB);
+		ImGui::Text("%u x %u", (int)g_Resource[1].channelRes.x, (int)g_Resource[1].channelRes.y);
 		ImGui::PopItemWidth();
 
 		ImGui::Text("BufferC:");
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		static int resBufferC[2] = { (int)g_Resource[2].channelRes.x, (int)g_Resource[2].channelRes.y };
 		ImGui::PushItemWidth(150.0f);
-		ImGui::InputInt2("", resBufferC);
+		ImGui::Text("%u x %u", (int)g_Resource[2].channelRes.x, (int)g_Resource[2].channelRes.y);
 		ImGui::PopItemWidth();
 
 		ImGui::Text("BufferD:");
 		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		static int resBufferD[2] = { (int)g_Resource[3].channelRes.x, (int)g_Resource[3].channelRes.y };
 		ImGui::PushItemWidth(150.0f);
-		ImGui::InputInt2("", resBufferD);
+		ImGui::Text("%u x %u", (int)g_Resource[3].channelRes.x, (int)g_Resource[3].channelRes.y);
+		ImGui::PopItemWidth();
+
+		ImGui::Spacing();
+
+		if (g_Resource[0].buffers.isActive && ImGui::TreeNode("BufferA Resources"))
+		{
+			ImGui::Text("BufferA:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[0].x, (int)g_Resource[0].buffers.mvChannelRes[0].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferB:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[1].x, (int)g_Resource[0].buffers.mvChannelRes[1].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferC:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[2].x, (int)g_Resource[0].buffers.mvChannelRes[2].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferD:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[3].x, (int)g_Resource[0].buffers.mvChannelRes[3].y);
+			ImGui::PopItemWidth();
+			ImGui::TreePop();
+		}
+
+		if (g_Resource[1].buffers.isActive && ImGui::TreeNode("BufferB Resources"))
+		{
+			ImGui::Text("BufferA:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[0].x, (int)g_Resource[1].buffers.mvChannelRes[0].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferB:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[1].x, (int)g_Resource[1].buffers.mvChannelRes[1].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferC:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[2].x, (int)g_Resource[1].buffers.mvChannelRes[2].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferD:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[3].x, (int)g_Resource[1].buffers.mvChannelRes[3].y);
+			ImGui::PopItemWidth();
+			ImGui::TreePop();
+		}
+
+		if (g_Resource[2].buffers.isActive && ImGui::TreeNode("BufferC Resources"))
+		{
+			ImGui::Text("BufferA:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[0].x, (int)g_Resource[2].buffers.mvChannelRes[0].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferB:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[1].x, (int)g_Resource[2].buffers.mvChannelRes[1].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferC:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[2].x, (int)g_Resource[2].buffers.mvChannelRes[2].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferD:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[3].x, (int)g_Resource[2].buffers.mvChannelRes[3].y);
+			ImGui::PopItemWidth();
+			ImGui::TreePop();
+		}
+
+		if (g_Resource[3].buffers.isActive && ImGui::TreeNode("BufferD Resources"))
+		{
+			ImGui::Text("BufferA:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[0].x, (int)g_Resource[3].buffers.mvChannelRes[0].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferB:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[1].x, (int)g_Resource[3].buffers.mvChannelRes[1].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferC:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[2].x, (int)g_Resource[3].buffers.mvChannelRes[2].y);
+			ImGui::PopItemWidth();
+
+			ImGui::Text("BufferD:");
+			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+			ImGui::PushItemWidth(150.0f);
+			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[3].x, (int)g_Resource[3].buffers.mvChannelRes[3].y);
+			ImGui::PopItemWidth();
+			ImGui::TreePop();
+		}
+
+		ImGui::Separator();
+		ImGui::Separator();
+
+		ImGui::Text("Changes Every Frame");
+
+		ImGui::Separator();
+
+		ImGui::Text("Frame:");
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		ImGui::PushItemWidth(150.0f);
+		ImGui::Text("%u", g_vFrame);
+		ImGui::PopItemWidth();
+
+		ImGui::Text("Time:");
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		ImGui::PushItemWidth(150.0f);
+		ImGui::Text("%.3f sec", !g_vPause ? g_gameT + g_deltaT : g_gameT);
+		ImGui::PopItemWidth();
+
+		ImGui::Text("Delta Time:");
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
+		ImGui::PushItemWidth(150.0f);
+		ImGui::Text("%.5f ms", g_deltaT * 1000.0f);
+		ImGui::PopItemWidth();
+
+		ImGui::Text("Mouse:");
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 300.0f);
+		ImGui::PushItemWidth(300.0f);
+		ImGui::Text("x:%.4f y:%.4f LC:%u RC:%u", g_vMouse.x, g_vMouse.y, (int)g_vMouse.z, (int)g_vMouse.w);
+		ImGui::PopItemWidth();
+
+		// Get time
+		time_t now = time(0);
+		struct tm ltm;
+		localtime_s(&ltm, &now);
+		int hour = 1 + ltm.tm_hour;
+		int min = 1 + ltm.tm_min;
+		int sec = 1 + ltm.tm_sec;
+
+		ImGui::Text("Date:");
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 300.0f);
+		ImGui::PushItemWidth(300.0f);
+		ImGui::Text("%u:%u:%u %u seconds", ltm.tm_mday, 1 + ltm.tm_mon, 1900 + ltm.tm_year, ((hour * 60 + min) * 60) + sec);
 		ImGui::PopItemWidth();
 
 		ImGui::Separator();
 		ImGui::Separator();
-*/
-		ImGui::End();
-	}
 
-	{
-		static float f = 0.0f;
-		static int counter = 0;
-
-		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-		ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-
-		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f    
-		ImGui::ColorEdit3("clear color", (float*)&g_clear_color); // Edit 3 floats representing a color
-
-		if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-			counter++;
-		ImGui::SameLine();
-		ImGui::Text("counter = %d", counter);
-
-		static float resol[2] = { 1920, 1080 };
-		ImGui::DragFloat2("", resol);
-
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
 	}
 
@@ -1257,4 +1437,10 @@ void ReloadShaders()
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
+
+	for (int i = 0; i < 4; ++i)
+	{
+		if (g_Resource[i].buffers.isActive)
+			g_Resource[i].buffers.ReloadShader(g_pd3dDevice, g_pVertexShader, i);
+	}
 }

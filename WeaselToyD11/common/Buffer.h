@@ -15,6 +15,7 @@ public:
 
 	HRESULT InitBuffer(ID3D11Device*, ID3D11DeviceContext*, ID3D11VertexShader*, const int, const int, const int);
 	void Render(ID3D11DeviceContext*, ID3D11DepthStencilView*, ID3D11Buffer*, const UINT, const UINT, const UINT, const int);
+	HRESULT ReloadShader(ID3D11Device*, ID3D11VertexShader*, const int);
 	void SetShaderResource(ID3D11DeviceContext*, const int);
 	void ClearShaderResource(ID3D11DeviceContext*, const int);
 	void Release(int);

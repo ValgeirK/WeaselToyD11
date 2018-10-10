@@ -139,13 +139,6 @@ void ImGuiFileDialog::ScanDir(std::string vPath)
 			FileInfoStruct infos;
 
 			infos.fileName = ent->d_name;
-
-			if (infos.type == 'f')
-			{
-				size_t lpt = infos.fileName.find_last_of(".");
-				if (lpt != std::string::npos)
-					infos.ext = infos.fileName.substr(lpt);
-			}
 			
 			if (infos.fileName != ".")
 			{
@@ -154,6 +147,13 @@ void ImGuiFileDialog::ScanDir(std::string vPath)
 				case DT_REG: infos.type = 'f'; break;
 				case DT_DIR: infos.type = 'd'; break;
 				case DT_LNK: infos.type = 'l'; break;
+				}
+
+				if (infos.type == 'f')
+				{
+					size_t lpt = infos.fileName.find_last_of(".");
+					if (lpt != std::string::npos)
+						infos.ext = infos.fileName.substr(lpt);
 				}
 
 				m_FileList.push_back(infos);
@@ -298,7 +298,7 @@ bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::s
 				LoadTexture(device, &mShaderResourceView, std::string("textures/" + infos.fileName).c_str(), res);
 
 				ImGui::BeginTooltip();
-				ImGui::Image(mShaderResourceView, ImVec2(peakWidth, peakHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
+				ImGui::Image(mShaderResourceView, ImVec2((float)peakWidth, (float)peakHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 				ImGui::EndTooltip();
 			}
 		}
