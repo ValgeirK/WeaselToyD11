@@ -1,218 +1,277 @@
 //--------------------------------------------------------------------------------------
-// constant Buffer Variables
-//--------------------------------------------------------------------------------------
-Texture2D txDiffuse : register( t0 );
-SamplerState samLinear : register( s0 );
-
-cbuffer cbNeverChanges : register ( b0 )
-{
-	float4 iResolution;
-};
-
-cbuffer cbChangesEveryFrame : register ( b1 )
-{
-	float4	 iMouse;
-	float4   iDate;
-	float    iTime;
-	float    iTimeDelta;
-	int		 iFrame;
-	int		 Padding;
-};
-
-//--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
 
+#include "common/ConstantBuffers.hlsl"
+#include "common/macroGLSL.hlsl"
+
 struct PS_INPUT
 {
-    float4 pos : SV_POSITION;
-    float2 uv : UV;
+	float4 pos : SV_POSITION;
+	float2 uv : UV;
 };
 
-#define vec2 float2
-#define vec3 float3
-#define vec4 float4
-#define mat2 float2x2
-#define mat3 float3x3
-#define fract frac
-#define mix lerp
 
-static const int NUM_STEPS = 8;
-static const float PI	 	= 3.141592;
-static const float EPSILON	= 1e-3;
-#define EPSILON_NRM (0.1 / iResolution.x)
+/////////////////////////////////////////////////
+//			INSERT
+/////////////////////////////////////////////////
 
-// sea
-static const int ITER_GEOMETRY = 3;
-static const int ITER_FRAGMENT = 5;
-static const float SEA_HEIGHT = 0.6;
-static const float SEA_CHOPPY = 4.0;
-static const float SEA_SPEED = 0.8;
-static const float SEA_FREQ = 0.16;
-static const vec3 SEA_BASE = vec3(0.1,0.19,0.22);
-static const vec3 SEA_WATER_COLOR = vec3(0.8,0.9,0.6);
-#define SEA_TIME (1.0 + iTime * SEA_SPEED)
-static const mat2 octave_m = mat2(1.6,1.2,-1.2,1.6);
 
-// math
-mat3 fromEuler(vec3 ang) {
-	vec2 a1 = vec2(sin(ang.x),cos(ang.x));
-    vec2 a2 = vec2(sin(ang.y),cos(ang.y));
-    vec2 a3 = vec2(sin(ang.z),cos(ang.z));
-    mat3 m;
-    m[0] = vec3(a1.y*a3.y+a1.x*a2.x*a3.x,a1.y*a2.x*a3.x+a3.y*a1.x,-a2.y*a3.x);
-	m[1] = vec3(-a2.y*a1.x,a1.y*a2.y,a2.x);
-	m[2] = vec3(a3.y*a1.x*a2.x+a1.y*a3.x,a1.x*a3.x-a1.y*a3.y*a2.x,a2.y*a3.y);
-	return m;
-}
-float hash( vec2 p ) {
-	float h = dot(p,vec2(127.1,311.7));	
-    return fract(sin(h)*43758.5453123);
-}
-float noise( in vec2 p ) {
-    vec2 i = floor( p );
-    vec2 f = fract( p );	
-	vec2 u = f*f*(3.0-2.0*f);
-    return -1.0+2.0*mix( mix( hash( i + vec2(0.0,0.0) ), 
-                     hash( i + vec2(1.0,0.0) ), u.x),
-                mix( hash( i + vec2(0.0,1.0) ), 
-                     hash( i + vec2(1.0,1.0) ), u.x), u.y);
-}
+// Tiny Planet: Vulcan
+// by Morgan McGuire @CasualEffects
+//
+// Texturing inspired by Paul Malin https://www.shadertoy.com/view/ldBfDR
+//
+// I intentionally left the aliasing on the bright locations in...
+// it looks like heat distortion.
 
-// lighting
-float diffuse(vec3 n,vec3 l,float p) {
-    return pow(dot(n,l) * 0.4 + 0.6,p);
-}
-float specular(vec3 n,vec3 l,vec3 e,float s) {    
-    float nrm = (s + 8.0) / (PI * 8.0);
-    return pow(max(dot(reflect(e,n),l),0.0),s) * nrm;
-}
+static const bool autoRotate = true;
 
-// sky
-vec3 getSkyColor(vec3 e) {
-    e.y = max(e.y,0.0);
-    return vec3(pow(1.0-e.y,2.0), 1.0-e.y, 0.6+(1.0-e.y)*0.4);
-}
+/////////////////////////////////////////////////////////////////////////
+// Morgan's standard Shadertoy helpers
+#define Vector2      vec2
+#define Point2       vec2
+#define Point3       vec3
+#define Vector3      vec3
+#define Color3       vec3
+#define Radiance3    vec3
+#define Irradiance3  vec3
+#define Power3       vec3
+#define Biradiance3  vec3
 
-// sea
-float sea_octave(vec2 uv, float choppy) {
-    uv += noise(uv);        
-    vec2 wv = 1.0-abs(sin(uv));
-    vec2 swv = abs(cos(uv));    
-    wv = mix(wv,swv,wv);
-    return pow(1.0-pow(wv.x * wv.y,0.65),choppy);
-}
+static const float pi          = 3.1415926535;
+static const float degrees     = pi / 180.0;
+static const float inf         = 1.0 / 1e-10;
 
-float map(vec3 p) {
-    float freq = SEA_FREQ;
-    float amp = SEA_HEIGHT;
-    float choppy = SEA_CHOPPY;
-    vec2 uv = p.xz; uv.x *= 0.75;
+float square(float x) { return x * x; }
+float pow3(float x) { return x * square(x); }
+vec3 square(vec3 x) { return x * x; }
+vec3 pow3(vec3 x) { return x * square(x); }
+float pow4(float x) { return square(square(x)); }
+float pow5(float x) { return x * square(square(x)); }
+float pow8(float x) { return square(pow4(x)); }
+float infIfNegative(float x) { return (x >= 0.0) ? x : inf; }
+
+struct Ray { Point3 origin; Vector3 direction; };	
+struct Material { Color3 color; float metal; float smoothness; };
+struct Surfel { Point3 position; Vector3 normal; Material material; };
+struct Sphere { Point3 center; float radius; Material material; };
+   
+/** Analytic ray-sphere intersection. */
+bool intersectSphere(Point3 C, float r, Ray R, inout float nearDistance, inout float farDistance) { Point3 P = R.origin; Vector3 w = R.direction; Vector3 v = P - C; float b = 2.0 * dot(w, v); float c = dot(v, v) - square(r); float d = square(b) - 4.0 * c; if (d < 0.0) { return false; } float dsqrt = sqrt(d); float t0 = infIfNegative((-b - dsqrt) * 0.5); float t1 = infIfNegative((-b + dsqrt) * 0.5); nearDistance = min(t0, t1); farDistance  = max(t0, t1); return (nearDistance < inf); }
+
+///////////////////////////////////////////////////////////////////////////////////
+// The following are from https://www.shadertoy.com/view/4dS3Wd
+float hash(float n) { return fract(sin(n) * 1e4); }
+float hash(vec2 p) { return fract(1e4 * sin(17.0 * p.x + p.y * 0.1) * (0.1 + abs(sin(p.y * 13.0 + p.x)))); }
+float noise(float x) { float i = floor(x); float f = fract(x); float u = f * f * (3.0 - 2.0 * f); return mix(hash(i), hash(i + 1.0), u); }
+float noise(vec2 x) { vec2 i = floor(x); vec2 f = fract(x); float a = hash(i); float b = hash(i + vec2(1.0, 0.0)); float c = hash(i + vec2(0.0, 1.0)); float d = hash(i + vec2(1.0, 1.0)); vec2 u = f * f * (3.0 - 2.0 * f); return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y; }
+float noise(vec3 x) { const vec3 step = vec3(110, 241, 171); vec3 i = floor(x); vec3 f = fract(x); float n = dot(i, step); vec3 u = f * f * (3.0 - 2.0 * f); return mix(mix(mix( hash(n + dot(step, vec3(0, 0, 0))), hash(n + dot(step, vec3(1, 0, 0))), u.x), mix( hash(n + dot(step, vec3(0, 1, 0))), hash(n + dot(step, vec3(1, 1, 0))), u.x), u.y), mix(mix( hash(n + dot(step, vec3(0, 0, 1))), hash(n + dot(step, vec3(1, 0, 1))), u.x), mix( hash(n + dot(step, vec3(0, 1, 1))), hash(n + dot(step, vec3(1, 1, 1))), u.x), u.y), u.z); }
+
+#define DEFINE_FBM(name, OCTAVES) float name(vec3 x) { float v = 0.0; float a = 0.5; vec3 shift = vec3(100, 100, 100); for (int i = 0; i < OCTAVES; ++i) { v += a * noise(x); x = x * 2.0 + shift; a *= 0.5; } return v; }
+DEFINE_FBM(fbm3, 3)
+DEFINE_FBM(fbm5, 5)
+DEFINE_FBM(fbm6, 6)
+
+///////////////////////////////////////////////////////////////////////////////////
+
+// The red channel defines the height, but all channels
+// are used for color.
+#define elevationMap iChannel0
+#define colorMap iChannel1
+
+static const float       verticalFieldOfView = 25.0 * degrees;
+
+// Directional light source
+static const Vector3     w_i             = Vector3(1.0, 1.0, -0.8) / 1.6248076;
+static const Biradiance3 B_i             = Biradiance3(4, 4, 4);
+
+static const Point3      planetCenter    = Point3(0, 0, 0);
+
+// Including mountains
+static const float       planetMaxRadius = 1.0;
+static const float       maxMountain = 0.13;
+
+
+static const float planetMinRadius = planetMaxRadius - maxMountain;
+
+static mat3 planetRotation;
+
+/** Returns color, coverage under world-space point wsPoint.
+    e is the relative height of the surface. 
+    k is the relative height of the ray
+*/
+Color3 samplePlanet(Point3 osPosition, out float e, out float k) {
+	Point3 s = normalize(osPosition);    
     
-    float d, h = 0.0;    
-    for(int i = 0; i < ITER_GEOMETRY; i++) {        
-    	d = sea_octave((uv+SEA_TIME)*freq,choppy);
-    	d += sea_octave((uv-SEA_TIME)*freq,choppy);
-        h += d * amp;        
-    	uv = mul(uv, octave_m); freq *= 1.9; amp *= 0.22;
-        choppy = mix(choppy,1.0,0.2);
-    }
-    return p.y - h;
+    // Cylindrical map coords
+    Point2 cylCoord = vec2(atan(s.z, -s.x) / pi, s.y * 0.5 + 0.5);
+
+    // Length of osPosition = elevation
+    float sampleElevation  = length(osPosition);//dot(osPosition, s);
+    
+    // Relative height of the sample point [0, 1]
+    k = (sampleElevation - planetMinRadius) * (1.0 / maxMountain);
+
+    // Use explicit MIPs, since derivatives
+    // will be random based on the ray marching
+    float lod = (iResolution.x > 800.0) ? 1.0 : 2.0;
+    
+    // Relative height of the surface [0, 1]
+    e = mix(tx0.SampleLevel(elevationMap, cylCoord, lod).r, tx0.SampleLevel(elevationMap, s.xz, lod).r, abs(s.y));
+    e = square((e - 0.2) / 0.8) * 0.5;
+    
+    // Soften glow at high elevations, using the mip chain
+    // (also blurs 
+    lod += k * 6.0;
+    
+    // Planar map for poles mixed into cylindrical map
+    Color3 material = mix(tx1.SampleLevel(colorMap, cylCoord * vec2(2.0, 2.0), lod).rgb,
+                          tx1.SampleLevel(colorMap, s.xz, lod).rgb, abs(s.y));
+
+    // Increase contrast
+    material = pow3(material);
+    
+    
+    // Object space height of the surface
+    float surfaceElevation = mix(planetMinRadius, planetMaxRadius, e);
+
+    return material;
 }
 
-float map_detailed(vec3 p) {
-    float freq = SEA_FREQ;
-    float amp = SEA_HEIGHT;
-    float choppy = SEA_CHOPPY;
-    vec2 uv = p.xz; uv.x *= 0.75;
-    
-    float d, h = 0.0;    
-    for(int i = 0; i < ITER_FRAGMENT; i++) {        
-    	d = sea_octave((uv+SEA_TIME)*freq,choppy);
-    	d += sea_octave((uv-SEA_TIME)*freq,choppy);
-        h += d * amp;        
-    	uv = mul(uv, octave_m); freq *= 1.9; amp *= 0.22;
-        choppy = mix(choppy,1.0,0.2);
-    }
-    return p.y - h;
+
+/** Relative to mountain range */
+float elevation(Point3 osPoint) {
+    float e, k;
+    samplePlanet(osPoint, e, k);
+    return e;
 }
 
-vec3 getSeaColor(vec3 p, vec3 n, vec3 l, vec3 eye, vec3 dist) {  
-    float fresnel = clamp(1.0 - dot(n,-eye), 0.0, 1.0);
-    fresnel = pow(fresnel,3.0) * 0.65;
-        
-    vec3 reflected = getSkyColor(reflect(eye,n));    
-    vec3 refracted = SEA_BASE + diffuse(n,l,80.0) * SEA_WATER_COLOR * 0.12; 
-    
-    vec3 color = mix(refracted,reflected,fresnel);
-    
-    float atten = max(1.0 - dot(dist,dist) * 0.001, 0.0);
-    color += SEA_WATER_COLOR * (p.y - SEA_HEIGHT) * 0.18 * atten;
-    
-	float spec = specular(n,l,eye,60.0);
-    color += vec3(spec, spec, spec);
-    
-    return color;
-}
 
-// tracing
-vec3 getNormal(vec3 p, float eps) {
-    vec3 n;
-    n.y = map_detailed(p);    
-    n.x = map_detailed(vec3(p.x+eps,p.y,p.z)) - n.y;
-    n.z = map_detailed(vec3(p.x,p.y,p.z+eps)) - n.y;
-    n.y = eps;
-    return normalize(n);
-}
 
-float heightMapTracing(vec3 ori, vec3 dir, out vec3 p) {  
-    float tm = 0.0;
-    float tx = 1000.0;    
-    float hx = map(ori + dir * tx);
-    if(hx > 0.0) return tx;   
-    float hm = map(ori + dir * tm);    
-    float tmid = 0.0;
-    for(int i = 0; i < NUM_STEPS; i++) {
-        tmid = mix(tm,tx, hm/(hm-hx));                   
-        p = ori + dir * tmid;                   
-    	float hmid = map(p);
-		if(hmid < 0.0) {
-        	tx = tmid;
-            hx = hmid;
-        } else {
-            tm = tmid;
-            hm = hmid;
-        }
-    }
-    return tmid;
-}
 
-float4 main( PS_INPUT input ) : SV_Target
-{
-	float2 uv = float2( input.pos.x / iResolution.x, 1 - input.pos.y / iResolution.y);
-    uv = uv * 2.0 - 1.0;
-    uv.x *= iResolution.x / iResolution.y;    
-    float time = iTime * 0.3 + iMouse.x*0.01;
-        
-    // ray
-    vec3 ang = vec3(sin(time*3.0)*0.1,sin(time)*0.2+0.3,time);    
-    vec3 ori = vec3(0.0,3.5,time*5.0);
-    vec3 dir = normalize(vec3(uv.xy,-2.0)); dir.z += length(uv) * 0.15;
-    dir = mul(normalize(dir), fromEuler(ang));
-    
-    // tracing
-    vec3 p;
-    heightMapTracing(ori,dir,p);
-    vec3 dist = p - ori;
-    vec3 n = getNormal(p, dot(dist,dist) * EPSILON_NRM);
-    vec3 light = normalize(vec3(0.0,1.0,0.8)); 
-             
-    // color
-    vec3 color = mix(
-        getSkyColor(dir),
-        getSeaColor(p,n,light,dir,dist),
-    	pow(smoothstep(0.0,-0.05,dir.y),0.3));
-        
-    // post
-	return vec4(pow(color,vec3(0.75, 0.75, 0.75)), 1.0);
-}
+
+float4 main(PS_INPUT input) : SV_Target
+
+	{// Rotate over time
+		float yaw   = -((iMouse.x / iResolution.x) * 2.5 - 1.25) + (autoRotate ? -iTime * 0.02 : 0.0);
+		float pitch = ((iMouse.y > 0.0 ? iMouse.y : iResolution.y * 0.3) / iResolution.y) * 2.5 - 1.25;
+	 	planetRotation = 
+	    	mul(mat3(cos(yaw), 0, -sin(yaw), 0, 1, 0, sin(yaw), 0, cos(yaw)),
+	    	mat3(1, 0, 0, 0, cos(pitch), sin(pitch), 0, -sin(pitch), cos(pitch)));
+	
+	    
+	    Vector2 invResolution = 1.0 / iResolution.xy;
+		
+		// Outgoing light
+		Radiance3 L_o;
+		
+		Surfel surfel;	
+		
+		Ray eyeRay;
+		eyeRay.origin = Point3(0.0, 0.0, 5.0);
+		eyeRay.direction = normalize(Vector3(fragCoord.xy - iResolution.xy / 2.0, iResolution.y / (-2.0 * tan(verticalFieldOfView / 2.0))));
+		    
+	    Point3 hitPoint;    
+	    float minDistanceToPlanet, maxDistanceToPlanet;
+	    
+	    bool hitBounds = intersectSphere(planetCenter, planetMaxRadius, eyeRay, minDistanceToPlanet, maxDistanceToPlanet);
+	
+	    // Stars
+	    L_o = vec3(1,1,1) * max(0.0, hash(fragCoord * 0.5 + 10.0) - 0.999) / 0.0001 +
+	        pow5(fbm3(fragCoord.xyy * -0.007 + iTime * 0.1)) * square(tx1.Sample(iChannel1, fragCoord * invResolution.x).rbr) * max(0.0, hash(fragCoord * 0.1) - 0.99) / 0.0003;
+	        
+	    // Background wash gradient
+	    float gradCoord = (fragCoord.x + fragCoord.y) * (invResolution.x * 0.5);
+	    L_o += mix(Color3(0.025, 0, 0.02), Color3(0.11, 0.06, 0.0), gradCoord) * 1.5 *
+	         (0.15 + smoothstep(0.0, 1.0, 2.5 * abs(gradCoord - 0.4)));
+	    
+	    // Background glow ("atmosphere")
+	    L_o += Color3(0.6, 0.06, 0.01) * (17.0 * pow8(max(0.0, 1.0 - length((fragCoord - iResolution.xy * 0.5) * invResolution.y))));
+	
+	    // Sun
+	    Point2 sunCoord = vec2(-0.7, -0.5) + (fragCoord - iResolution.xy * 0.5) * invResolution.y;
+	    float sunDist = max(0.0,  1.0 - length(sunCoord));
+	    L_o += Color3(15, 9, 6) * (pow(sunDist, 12.0) * (1.0 + 0.25 * noise(sin(iTime * 0.1) + iTime * 0.1 + 20.0 * atan(sunCoord.x, -sunCoord.y))));
+	    
+	    
+	    if (hitBounds) 
+	    {
+	        Color3 glow = Color3(0,0,0);
+	        // Planet surface + atmospherics
+	        
+	        // March to surface
+	        const int NUM_STEPS = 250;
+	        
+	        // Total traversal should be either 25% of the thickness of the planet,
+	        // the distance between total, or the max mountain height
+	        float dt = (maxDistanceToPlanet - minDistanceToPlanet) / float(NUM_STEPS);
+	        Color3 material = Color3(0,0,0);
+	        Vector3 wsNormal = Vector3(0,0,0);
+	        Color3 p;
+	        float coverage = 0.0;
+	        float e = 1.0, k = 0.0;
+	
+	        // Take the ray to the planet's object space
+	        eyeRay.origin = mul((eyeRay.origin - planetCenter), planetRotation);
+	        eyeRay.direction = mul(eyeRay.direction, planetRotation);
+	        
+	        Point3 X;
+	        for (int i = 0; (i < NUM_STEPS) && (coverage < 1.0); ++i) 
+	        {
+	            // Point on the ray in object space
+	            X = eyeRay.origin + eyeRay.direction * (dt * float(i) + minDistanceToPlanet);
+	            
+	            // color, coverage
+		        p = samplePlanet(X, e, k);
+	            if (e > k) 
+	            {
+	                // Hit the surface
+	                material = p;
+	                coverage = 1.0;
+	                
+	                // Surface emission
+		            glow += pow(p, p * 2.5 + 7.0) * 3e3;
+	            } else 
+	            {
+	                // Passing through atmosphere above lava; accumulate glow
+		            glow += pow(p, p + 7.0) * square(square(1.0 - k)) * 25.0;
+	            }
+	        }
+	
+	        // Planetary sphere normal
+	        Vector3 sphereNormal = normalize(mul(planetRotation, X));
+	            
+	        // Surface normal
+	        const float eps = 0.01;
+	        wsNormal = mul(planetRotation,
+	            normalize(Vector3(elevation(X + Vector3(eps, 0, 0)), 
+	                              elevation(X + Vector3(0, eps, 0)), 
+	                              elevation(X + Vector3(0, 0, eps))) - 
+	                              e));
+	        
+	        
+	        wsNormal = normalize(mix(wsNormal, sphereNormal, 0.95));
+	                
+	        // Lighting and compositing
+	        L_o =  mix(L_o, material * 
+	                   // Sun
+	                   (max(dot(wsNormal, w_i) + 0.1, 0.0) * B_i + 
+	                    
+	                    
+	                    // Rim light
+	                    square(max(0.8 - sphereNormal.z, 0.0)) * Color3(2.0, 1.5, 0.5)), coverage);
+	        L_o += glow;
+	        
+	         
+	        if (false && coverage > 0.0) 
+	        {
+	            // Show normals
+		      //  L_o = wsNormal * 0.5 + 0.5;
+	          //  L_o = max(0.0, dot(wsNormal, w_i)) * vec3(1);
+	        }
+	    }
+	    
+		vec3 sq = sqrt(L_o);
+	    return vec4(sq, 1.0); //maxDistanceToPlanet
+	}

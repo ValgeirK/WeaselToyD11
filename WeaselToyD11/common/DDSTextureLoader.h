@@ -31,6 +31,12 @@ namespace DirectX
         DDS_ALPHA_MODE_CUSTOM        = 4,
     };
 
+	// Added
+	HRESULT GetTextureInformation(
+		const wchar_t* fileName, 
+		uint32_t& width, 
+		uint32_t& height);
+
     // Standard version
     HRESULT CreateDDSTextureFromMemory(
         _In_ ID3D11Device* d3dDevice,

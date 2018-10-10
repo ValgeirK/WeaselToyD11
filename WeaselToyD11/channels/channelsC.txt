@@ -1,0 +1,12 @@
+########## Texture Controls #############
+s 2
+
+iC textures/weave.dds
+t texture
+f mipmap
+w repeat
+
+iC textures/wood.dds
+t texture
+f mipmap
+w repeat

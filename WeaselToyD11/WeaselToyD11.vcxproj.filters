@@ -1,33 +1,108 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
-    <Filter Include="common">
-      <UniqueIdentifier>{1ce274ed-ec79-4b84-a5ef-926716c3941d}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="WeaselToyD11.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="WeaselToyD11.cpp" />
+    <ClCompile Include="lib\imgui.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\imgui_impl_dx11.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\imgui_impl_win32.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\imgui_demo.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\imgui_draw.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\imgui_widgets.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="common\Buffer.cpp">
+      <Filter>common</Filter>
     </ClCompile>
     <ClCompile Include="common\DDSTextureLoader.cpp">
       <Filter>common</Filter>
     </ClCompile>
+    <ClCompile Include="common\Loader.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\Textures.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiFileDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="lib\imgui_impl_dx11.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imconfig.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imgui.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imgui_impl_win32.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imgui_internal.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imstb_rectpack.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imstb_textedit.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imstb_truetype.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="common\type\Resource.h">
+      <Filter>common\type</Filter>
+    </ClInclude>
+    <ClInclude Include="common\type\Channel.h">
+      <Filter>common\type</Filter>
+    </ClInclude>
+    <ClInclude Include="common\type\ConstantBuffer.h">
+      <Filter>common\type</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Buffer.h">
+      <Filter>common</Filter>
+    </ClInclude>
     <ClInclude Include="common\DDSTextureLoader.h">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="common\HelperFunction.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Loader.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Shader.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Textures.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiFileDialog.h" />
+    <ClInclude Include="dirent\dirent.h">
+      <Filter>dirent</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="common">
+      <UniqueIdentifier>{cb942600-748a-49e2-bde9-3aafb34bade5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{f2ae7376-e86e-4c0b-9f13-8f71ec92afea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common\type">
+      <UniqueIdentifier>{76391d28-2dd5-4193-863b-11710e83963d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dirent">
+      <UniqueIdentifier>{560ee03d-2c47-4ac9-b565-387bc1d6f1f8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

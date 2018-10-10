@@ -1,0 +1,17 @@
+########## Texture Controls #############
+s 3
+
+iC textures/abstract3.dds
+t texture
+f mipmap
+w repeat
+
+iC textures/organic4.dds
+t texture
+f mipmap
+w repeat
+
+iC textures/font1.dds
+t buffer
+f mipmap
+w repeat

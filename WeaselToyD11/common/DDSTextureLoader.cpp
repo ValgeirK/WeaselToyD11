@@ -1671,6 +1671,32 @@ HRESULT DirectX::CreateDDSTextureFromMemoryEx(ID3D11Device* d3dDevice,
 }
 
 //--------------------------------------------------------------------------------------
+
+HRESULT DirectX::GetTextureInformation(const wchar_t* fileName, uint32_t& width, uint32_t& height)
+{
+	const DDS_HEADER* header = nullptr;
+	const uint8_t* bitData = nullptr;
+	size_t bitSize = 0;
+
+	std::unique_ptr<uint8_t[]> ddsData;
+	HRESULT hr = LoadTextureDataFromFile(fileName,
+		ddsData,
+		&header,
+		&bitData,
+		&bitSize
+	);
+	if (FAILED(hr))
+	{
+		return hr;
+	}
+
+	width = header->width;
+	height = header->height;
+
+	return hr;
+}
+
+//--------------------------------------------------------------------------------------
 _Use_decl_annotations_
 HRESULT DirectX::CreateDDSTextureFromFile(ID3D11Device* d3dDevice,
     const wchar_t* fileName,
