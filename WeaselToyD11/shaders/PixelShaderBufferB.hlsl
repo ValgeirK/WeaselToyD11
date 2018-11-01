@@ -225,8 +225,8 @@ if (dt < 0.005) {
 	const float tSize1 = 1. / 4.;
 
 	// Texture-based bump mapping.
-	if (sp.y < -(FH - 0.005)) sn = doBumpMap(iChannel13, tx13, sp*tSize1, sn, 0.025); // Floor.
-	else sn = doBumpMap(iChannel12, tx12, sp*tSize0, sn, 0.025); // Walls.
+	if (sp.y < -(FH - 0.005)) sn = doBumpMap(iChannel9, tx9, sp*tSize1, sn, 0.025); // Floor.
+	else sn = doBumpMap(iChannel8, tx8, sp*tSize0, sn, 0.025); // Walls.
 
 	// Ambient occlusion.
 	float ao = calculateAO(sp, sn);
@@ -268,8 +268,8 @@ if (dt < 0.005) {
 	// Obtaining the texel color. If the surface point is above the floor
 	// height use the wall texture, otherwise use the floor texture.
 	vec3 texCol;
-	if (sp.y < -(FH - 0.005)) texCol = tex3D(iChannel13, tx13, sp*tSize1, sn); // Floor.
-	else texCol = tex3D(iChannel12, tx12, sp*tSize0, sn); // Walls.
+	if (sp.y < -(FH - 0.005)) texCol = tex3D(iChannel9, tx9, sp*tSize1, sn); // Floor.
+	else texCol = tex3D(iChannel8, tx8, sp*tSize0, sn); // Walls.
 
 	// Shadertoy doesn't appear to have anisotropic filtering turned on... although,
 	// I could be wrong. Texture-bumped objects don't appear to look as crisp. Anyway, 
@@ -309,5 +309,5 @@ if (dt < 0.005) {
 // Edit: No gamma correction -- I can't remember whether it was a style choice, or whether I forgot at
 // the time, but you should always gamma correct. In this case, just think of it as rough gamma correction 
 // on a postprocessed color: sceneCol = sqrt(sceneCol*sceneCol); :D
-return vec4(clamp(sceneCol, 0., 1.), 1.);
+return vec4(clamp(sceneCol, 0., 1.), 1.0);
 }

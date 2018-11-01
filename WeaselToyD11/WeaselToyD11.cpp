@@ -8,19 +8,37 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include <directxcolors.h>
-
-#include <string>
+//#include <pix3.h>
+#include <string.h>
+#include <vector>
 
 #include "common/Textures.h"
 #include "common/Loader.h"
 #include "common/Shader.h"
 #include "common/Buffer.h"
 #include "common/HelperFunction.h"
+#include "common/TextureLib.h"
+#include "common/ImGuiWindows.h"
 #include "common/type/ConstantBuffer.h"
 #include "common/type/Channel.h"
 #include "common/type/Resource.h"
 
-#include "ImGuiFileDialog.h"
+
+//--------------------------------------------------------------------------------------
+// Defines
+//--------------------------------------------------------------------------------------
+#define D3D_VERIFY(func)					\
+	HRESULT hr = func;						\
+	assert(hr == S_OK);						
+
+
+#define SAFE_RELEASE(ptr)					\
+	if (ptr)								\
+	{										\
+		UINT RefCount = ptr->Release();		\
+		assert(RefCount == 0);				\
+		ptr = nullptr;						\
+	}
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -76,8 +94,11 @@ ID3D11PixelShader*          g_pPixelShader = nullptr;
 // Resource
 Resource					g_Resource[4];
 
+// Buffers
+Buffer						g_Buffers[4];
+
 // ShaderToy Image
-ID3D11Texture2D*			g_mRenderTargetTexture = nullptr;
+ID3D11Texture2D*			g_pRenderTargetTexture = nullptr;
 ID3D11RenderTargetView*     g_pRenderTargetView = nullptr;
 ID3D11ShaderResourceView*   g_pShaderResourceView = nullptr;
 
@@ -91,37 +112,42 @@ ID3D11Buffer*               g_pCBNeverChanges = nullptr;
 ID3D11Buffer*               g_pCBChangesEveryFrame = nullptr;
 
 // Demo
+TextureLib*					g_pTexturelib;
 DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
-ImGuiWindowFlags			g_window_flags = 0;
-float				        g_vLastT = 0.0f;
-float						g_deltaT = 0.0f;
-float						g_gameT = 0.0f;
-float						g_vPauseT = 0;
-int						    g_vFrame = 0;
-bool			            g_vPause = false;
-ImVec4						g_clear_color = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
-int							g_pressIdentifier = 0;
-int							g_padding = 0;
-bool					    g_trackMouse = false;
-float						g_playSpeed = 1.0f;
+ImVec2						g_vCurrentWindowSize;
+ImVec2						g_vWindowSize;
+ImGuiWindowFlags			g_windowFlags;
+float				        g_fLastT = 0.0f;
+float						g_fDeltaT = 0.0f;
+float						g_fGameT = 0.0f;
+float						g_fPauseT = 0;
+int						    g_iFrame = 0;
+bool			            g_bPause = false;
+ImVec4						g_vClearColor = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
+int							g_iPressIdentifier = 0;
+int							g_iPadding = 0;
+bool					    g_bTrackMouse = false;
+float						g_fPlaySpeed = 1.0f;
+std::vector<std::string>	g_vShaderErrorList;
+ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPADPP;
 
 
 
 //--------------------------------------------------------------------------------------
 // Forward declarations
 //--------------------------------------------------------------------------------------
-HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow);
-HRESULT InitDevice();
-HRESULT InitText();
-void CleanupDevice();
+HRESULT				InitWindow(HINSTANCE hInstance, int nCmdShow);
+HRESULT				InitDevice();
+HRESULT				InitTextures();
+void				CleanupDevice();
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-void Render();
-void ReloadShaders();
+void				Render();
+void				ReloadShaders();
 
-void InitImGui();
-void ImGuiSetup(HINSTANCE);
-void ImGuiRender();
+void				InitImGui();
+void				ImGuiSetup(HINSTANCE);
+void				ImGuiRender();
 
 
 //--------------------------------------------------------------------------------------
@@ -130,17 +156,28 @@ void ImGuiRender();
 //--------------------------------------------------------------------------------------
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
+#ifdef DEBUG
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif // DEBUG
+
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
 	if (FAILED(InitWindow(hInstance, nCmdShow)))
 		return 0;
 
-	if (FAILED(InitDevice()))
+	//MessageBox(nullptr,
+	//	(LPCSTR)"Start Pix.", (LPCSTR)"Error", MB_OK);
+
+	//PIXBeginEvent(0, "Initializing Device");
 	{
-		CleanupDevice();
-		return 0;
+		if (FAILED(InitDevice()))
+		{
+			CleanupDevice();
+			return 0;
+		}
 	}
+	//PIXEndEvent(); // Initializing Device
 
 	InitImGui();
 
@@ -155,15 +192,37 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		}
 		else
 		{
-			// Render the ShaderToy image
-			Render();
+			byte col = 0;
 
-			ImGuiSetup(hInstance);
+			//PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
+			{
+				// Render the ShaderToy image
+				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "Render");
+				{
+					Render();
+				}
+				//PIXEndEvent(); // RENDER
 
-			ImGuiRender();
+				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
+				{
+					ImGuiSetup(hInstance);
+				}
+				//PIXEndEvent(); // IMGUISETUP
 
-			// Present the information rendered to the back buffer to the front buffer (the screen)
-			g_pSwapChain->Present(1, 0);
+
+				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
+				{
+					ImGuiRender();
+				}
+				//PIXEndEvent();
+
+				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "Present");
+				{
+					D3D_VERIFY(g_pSwapChain->Present(1, 0));
+				}
+				//PIXEndEvent(); // PRESENT
+			}
+			//PIXEndEvent(); // MAIN LOOP
 		}
 	}
 
@@ -197,7 +256,14 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow)
 
 	// Create window
 	g_hInst = hInstance;
-	RECT rc = { 0, 0, 2560, 1440 };
+	
+	// Get desktop resolution
+	const HWND hDesktop = GetDesktopWindow();
+	RECT desktop;
+	GetWindowRect(hDesktop, &desktop);
+
+	RECT rc = { 0, 0, desktop.right * 2 / 3, desktop.bottom * 2 / 3 };
+	g_vWindowSize = ImVec2((float)(desktop.right * 2 / 3), (float)(desktop.bottom * 2 / 3));
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 	g_hWnd = CreateWindow((LPCSTR)"TutorialWindowClass", (LPCSTR)"WeaselToyD11",
 		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
@@ -249,7 +315,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			case 'P':
 			case VK_SPACE:
 				// Pause
-				g_vPause = !g_vPause;
+				g_bPause = !g_bPause;
 				break;
 			case VK_ESCAPE:
 				DestroyWindow(hWnd);
@@ -299,7 +365,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_MOUSEMOVE:
 	{
-		if ((wParam & MK_LBUTTON) && g_trackMouse)
+		if ((wParam & MK_LBUTTON) && g_bTrackMouse)
 		{
 			POINTS pts = MAKEPOINTS(lParam);
 			g_vMouse.x = pts.x;
@@ -434,54 +500,9 @@ HRESULT InitDevice()
 
 	SetDebugObjectName(g_pBackBufferRenderTargetView, "BackBufferRenderTargetView");
 
-	Create2DTexture(g_pd3dDevice, &g_mRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, width, height);
+	Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, width, height);
 
-	D3D11_TEXTURE2D_DESC depthStencilDesc;
-
-	depthStencilDesc.Width = width;
-	depthStencilDesc.Height = height;
-	depthStencilDesc.MipLevels = 1;
-	depthStencilDesc.ArraySize = 1;
-	depthStencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	depthStencilDesc.SampleDesc.Count = 1;
-	depthStencilDesc.SampleDesc.Quality = 0;
-	depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
-	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-	depthStencilDesc.CPUAccessFlags = 0;
-	depthStencilDesc.MiscFlags = 0;
-
-	D3D11_DEPTH_STENCIL_DESC dsDesc;
-
-	// Depth test parameters
-	dsDesc.DepthEnable = true;
-	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-	dsDesc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
-
-	// Stencil test parameters
-	dsDesc.StencilEnable = true;
-	dsDesc.StencilReadMask = 0xFF;
-	dsDesc.StencilWriteMask = 0xFF;
-
-	// Stencil operations if pixel is front-facing
-	dsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-	dsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
-	dsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
-	dsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
-
-	// Stencil operations if pixel is back-facing
-	dsDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-	dsDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
-	dsDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
-	dsDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
-
-	// Create the Depth/Stencil View
-	g_pd3dDevice->CreateTexture2D(&depthStencilDesc, NULL, &g_pDepthStencilBuffer);
-	g_pd3dDevice->CreateDepthStencilView(g_pDepthStencilBuffer, NULL, &g_pDepthStencilView);
-	g_pd3dDevice->CreateDepthStencilState(&dsDesc, &g_pDepthStencilState);
-
-	SetDebugObjectName(g_pDepthStencilBuffer, "DepthStencilBuffer");
-	SetDebugObjectName(g_pDepthStencilView, "DepthStencilView");
-	SetDebugObjectName(g_pDepthStencilState, "DepthStencilState");
+	CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, width, height);
 
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
 	g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, NULL);
@@ -512,7 +533,7 @@ HRESULT InitDevice()
 
 	// Compile the vertex shader
 	ID3DBlob* pVSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/VertexShader.hlsl", "main", "vs_4_0", &pVSBlob);
+	hr = CompileShaderFromFile(L"shaders/VertexShader.hlsl", "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
@@ -551,9 +572,17 @@ HRESULT InitDevice()
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob);
+	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
+		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
+		{
+			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
+
+			MessageBox(nullptr,
+				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
+		}
+
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 		return hr;
@@ -617,7 +646,8 @@ HRESULT InitDevice()
 	if (FAILED(hr))
 		return hr;
 
-	InitText();
+	
+	InitTextures();
 
 	SetDebugObjectName(g_pCBNeverChanges, "ConstantBuffer_NeverChanges");
 	SetDebugObjectName(g_pCBChangesEveryFrame, "ConstantBuffer_ChangesEveryFrame");
@@ -625,10 +655,10 @@ HRESULT InitDevice()
 	// Set constant buffers
 	CBNeverChanges cbNC;
 	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
-	cbNC.ChannelResolution[0] = g_Resource[0].channelRes;
-	cbNC.ChannelResolution[1] = g_Resource[1].channelRes;
-	cbNC.ChannelResolution[2] = g_Resource[2].channelRes;
-	cbNC.ChannelResolution[3] = g_Resource[3].channelRes;
+	cbNC.ChannelResolution[0] = g_Resource[0].m_vChannelRes;
+	cbNC.ChannelResolution[1] = g_Resource[1].m_vChannelRes;
+	cbNC.ChannelResolution[2] = g_Resource[2].m_vChannelRes;
+	cbNC.ChannelResolution[3] = g_Resource[3].m_vChannelRes;
 	
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
@@ -647,7 +677,6 @@ void InitImGui()
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
 
 	io.FontGlobalScale = 1.2f;
 
@@ -661,46 +690,56 @@ void InitImGui()
 //--------------------------------------------------------------------------------------
 // Load in textures and initialize the samplers
 //--------------------------------------------------------------------------------------
-HRESULT InitText()
+HRESULT InitTextures()
 {
 	HRESULT hr = S_OK;
 	Channel channels[4];
 	int size = 0;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		// Initializing all the buffers but they have the active flag set to false
+		g_Buffers[i] = Buffer();
+	}
+
+	// Populate the texture library
+	g_pTexturelib = new TextureLib();
+	g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
 
 	if(!LoadChannels("channels/channels.txt", channels, size))
 		return S_FALSE;
 
 	for (int i = 0; i < size; ++i)
 	{
-		if (channels[i].type == ChannelType::texture)
+		if (channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
-			g_Resource[i].type = ChannelType::texture;
+			g_Resource[i].m_Type = Channels::ChannelType::E_Texture;
 
-			// Load texture
-			LoadTexture(g_pd3dDevice, &g_Resource[i].pShaderResource, channels[i].texture, g_Resource[i].channelRes);
+			strcpy(g_Resource[i].m_strTexture,channels[i].m_strTexture);
 
-			// Texture
-			g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].pShaderResource);
+			// Get texture from texture lib
+			g_pTexturelib->GetTexture(channels[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
 		}
-		else if (channels[i].type == ChannelType::buffer)
+		else if (channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
 			RECT rc;
 			GetClientRect(g_hWnd, &rc);
 			UINT width = rc.right - rc.left;
 			UINT height = rc.bottom - rc.top;
 
-			g_Resource[i].type = ChannelType::buffer;
+			g_Resource[i].m_Type = Channels::ChannelType::E_Buffer;
 
 			// Initialize buffer
-			g_Resource[i].buffers.InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, width, height, i);
+			g_Buffers[static_cast<int>(channels[i].m_BufferId)].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_Buffers, width, height, channels[i].m_BufferId);
 
-			g_Resource[i].channelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+			g_Resource[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+			g_Resource[i].m_iBufferIndex = static_cast<int>(channels[i].m_BufferId);
 
-			g_Resource[i].buffers.SetShaderResource(g_pImmediateContext, i);
+			g_Buffers[static_cast<int>(channels[i].m_BufferId)].SetShaderResource(g_pImmediateContext, i);
 		}
 
 		// Create Sampler
-		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].pSampler, channels[i], TextLoc::main, i);
+		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, channels[i], -1, i);
 	}
 
 	return S_OK;
@@ -712,19 +751,38 @@ HRESULT InitText()
 //--------------------------------------------------------------------------------------
 void Render()
 {
-	RECT rc;
-	GetClientRect(g_hWnd, &rc);
-	UINT width = rc.right - rc.left;
-	UINT height = rc.bottom - rc.top;
+	if (g_pTexturelib->m_bReload)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
+			{
+				// Get texture from texture lib
+				g_pTexturelib->GetTexture(g_Resource[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
+
+				// Texture
+				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
+			}
+		}
+
+		g_pTexturelib->m_bReload = false;
+	}
 
 	for (int i = 0; i < 4; ++i)
 	{
-		if (g_Resource[i].buffers.isActive)
+		// Update buffers
+		if (g_Buffers[i].m_bIsActive)
 		{
-			g_Resource[i].buffers.ClearShaderResource(g_pImmediateContext, i);
-			g_Resource[i].buffers.Render(g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), width, height, i);
-			g_Resource[i].buffers.SetShaderResource(g_pImmediateContext, i);
+			// Update the buffer frames
+			g_Buffers[i].Render(g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), (UINT)g_vCurrentWindowSize.x, (UINT)g_vCurrentWindowSize.y, i);
 		}
+	}
+
+	for (int i = 0; i < 4; ++i)
+	{
+		// Bind the correct textures and buffer resources
+		if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
+			g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
 	}
 
 	// Set the shaders
@@ -752,12 +810,12 @@ void Render()
 		static ULONGLONG timeStart = 0;
 		ULONGLONG timeCur = GetTickCount64();
 
-		if (g_vPause)
-			g_vPauseT = (float)(timeCur - (ULONGLONG)(g_vLastT * 1000.0f) - timeStart);
+		if (g_bPause)
+			g_fPauseT = (float)(timeCur - (ULONGLONG)(g_fLastT * 1000.0f) - timeStart);
 
 		if (timeStart == 0)
 			timeStart = timeCur;
-		t = (timeCur - timeStart - g_vPauseT) / 1000.0f;
+		t = (timeCur - timeStart - g_fPauseT) / 1000.0f;
 	}
 
 	// Clear the back buffer 
@@ -767,37 +825,37 @@ void Render()
 	// Update variables that change once per frame
 	//
 	CBChangesEveryFrame cb;
-	cb.Frame = g_vFrame++;
-	if(g_trackMouse)
-		cb.Mouse = g_vMouse;
+	cb.m_iFrame = g_iFrame++;
+	if(g_bTrackMouse)
+		cb.m_vMouse = g_vMouse;
 	else
-		cb.Mouse = DirectX::XMFLOAT4(g_vMouse.x, g_vMouse.y, 0.0f, 0.0f);
+		cb.m_vMouse = DirectX::XMFLOAT4(g_vMouse.x, g_vMouse.y, 0.0f, 0.0f);
 
-	g_deltaT = !g_vPause ? t - g_vLastT : 0.0f;
+	g_fDeltaT = !g_bPause ? t - g_fLastT : 0.0f;
 
-	if (!g_vPause)
-		g_vLastT = t;
+	if (!g_bPause)
+		g_fLastT = t;
 
-	g_deltaT *= g_playSpeed;
+	g_fDeltaT *= g_fPlaySpeed;
 
-	g_gameT += !g_vPause ? g_deltaT : 0.0f;
-	cb.TimeDelta = g_deltaT;
-	cb.Time = g_gameT;
+	g_fGameT += !g_bPause ? g_fDeltaT : 0.0f;
+	cb.m_fTimeDelta = g_fDeltaT;
+	cb.m_fTime = g_fGameT;
 
-	cb.Date.x = (float)(1900 + ltm.tm_year);
-	cb.Date.y = (float)(1 + ltm.tm_mon);
-	cb.Date.z = (float)(ltm.tm_mday);
-	cb.Date.w = (float)(((hour * 60 + min) * 60) + sec);
+	cb.m_vDate.x = (float)(1900 + ltm.tm_year);
+	cb.m_vDate.y = (float)(1 + ltm.tm_mon);
+	cb.m_vDate.z = (float)(ltm.tm_mday);
+	cb.m_vDate.w = (float)(((hour * 60 + min) * 60) + sec);
 
 	g_pImmediateContext->UpdateSubresource(g_pCBChangesEveryFrame, 0, nullptr, &cb, 0, 0);
 
 	// Buffer that only changes with the channel resolution
 	CBNeverChanges cbNC;
-	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
-	cbNC.ChannelResolution[0] = g_Resource[0].channelRes;
-	cbNC.ChannelResolution[1] = g_Resource[1].channelRes;
-	cbNC.ChannelResolution[2] = g_Resource[2].channelRes;
-	cbNC.ChannelResolution[3] = g_Resource[3].channelRes;
+	cbNC.Resolution = DirectX::XMFLOAT4((float)g_vCurrentWindowSize.x, (float)g_vCurrentWindowSize.y, 0.0f, 0.0f);
+	cbNC.ChannelResolution[0] = g_Resource[0].m_vChannelRes;
+	cbNC.ChannelResolution[1] = g_Resource[1].m_vChannelRes;
+	cbNC.ChannelResolution[2] = g_Resource[2].m_vChannelRes;
+	cbNC.ChannelResolution[3] = g_Resource[3].m_vChannelRes;
 
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
@@ -805,6 +863,9 @@ void Render()
 	g_pImmediateContext->PSSetConstantBuffers(1, 1, &g_pCBChangesEveryFrame);
 	g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
 
+	//PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
+
+	// Draw th triangles that make up the window
 	g_pImmediateContext->DrawIndexed(ARRAYSIZE(g_Indicies), 0, 0);
 }
 
@@ -816,7 +877,7 @@ void ImGuiRender()
 	// Rendering
 	ImGui::Render();
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
-	g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, (float*)&g_clear_color);
+	g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, (float*)&g_vClearColor);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
@@ -826,46 +887,56 @@ void ImGuiRender()
 //--------------------------------------------------------------------------------------
 void CleanupDevice()
 {
+	ULONG refs = 0;
+
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
+
 
 	for (int i = 0; i < 4; ++i)
 	{
-		if (g_Resource[i].buffers.isActive)
+		if (g_Buffers[i].m_bIsActive)
 		{
-			g_Resource[i].buffers.Release(i);
+			g_Buffers[i].Release(i);
 		}
 
-		if (g_Resource[i].pSampler) g_Resource[i].pSampler->Release();
-		if (g_Resource[i].pShaderResource) g_Resource[i].pShaderResource->Release();
+		if (g_Resource[i].m_pSampler)
+			refs = g_Resource[i].m_pSampler->Release();
+		else
+			refs = 0;
+		if (refs > 0)
+			_RPTF2(_CRT_WARN, "Main Sampler %i still has %i references.\n", i, refs);
 	}
 
-	if (g_pCBNeverChanges) g_pCBNeverChanges->Release();
-	if (g_pCBChangesEveryFrame) g_pCBChangesEveryFrame->Release();
-	if (g_pVertexBuffer) g_pVertexBuffer->Release();
-	if (g_pIndexBuffer) g_pIndexBuffer->Release();
-	if (g_d3dInputLayout) g_d3dInputLayout->Release();
-	if (g_pVertexShader) g_pVertexShader->Release();
-	if (g_pPixelShader) g_pPixelShader->Release();
+	g_pTexturelib->Release();
 
-	if (g_pDepthStencilBuffer) g_pDepthStencilBuffer->Release();
-	if (g_pDepthStencilView) g_pDepthStencilView->Release();
+	SAFE_RELEASE(g_pCBNeverChanges);
 
-	if (g_mRenderTargetTexture) g_mRenderTargetTexture->Release();
-	if (g_pRenderTargetView) g_pRenderTargetView->Release();
-	if (g_pShaderResourceView) g_pShaderResourceView->Release();
+	SAFE_RELEASE(g_pCBNeverChanges);
+	SAFE_RELEASE(g_pCBChangesEveryFrame);
+	SAFE_RELEASE(g_pVertexBuffer);
+	SAFE_RELEASE(g_pIndexBuffer);
+	SAFE_RELEASE(g_d3dInputLayout);
+	SAFE_RELEASE(g_pVertexShader);
+	SAFE_RELEASE(g_pPixelShader);
 
-	if (g_pBackBufferRenderTargetView) g_pBackBufferRenderTargetView->Release();
-	if (g_pDepthStencilState) g_pDepthStencilState->Release();
-	if (g_pBlendState) g_pBlendState->Release();
-	if (g_pSwapChain) g_pSwapChain->Release();
-	if (g_pImmediateContext) g_pImmediateContext->Release();
+	SAFE_RELEASE(g_pDepthStencilBuffer);
+	SAFE_RELEASE(g_pDepthStencilView);
 
-	if (g_pd3dDevice) g_pd3dDevice->Release();
+	SAFE_RELEASE(g_pRenderTargetTexture);
+	SAFE_RELEASE(g_pRenderTargetView);
+	SAFE_RELEASE(g_pShaderResourceView);
 
+	SAFE_RELEASE(g_pBackBufferRenderTargetView);
+	SAFE_RELEASE(g_pDepthStencilState);
+	SAFE_RELEASE(g_pBlendState);
+	SAFE_RELEASE(g_pSwapChain);
+	SAFE_RELEASE(g_pImmediateContext);
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
+
+	SAFE_RELEASE(g_pd3dDevice);
 }
 
 //--------------------------------------------------------------------------------------
@@ -879,550 +950,106 @@ void ImGuiSetup(HINSTANCE hInstance)
 	ImGui::NewFrame();
 
 	if (ImGui::IsItemHovered())
-		g_trackMouse = false;
+		g_bTrackMouse = false;
 
-	{
-		ImGui::Begin("Control Panel");       
+	// Controls Window
+	int buttonPress = 0;
+	ControlWindow(g_bPause, g_fGameT, g_fPlaySpeed, g_vClearColor, buttonPress, g_eDefaultEditor);
 
-		if (ImGui::Button("Stop", ImVec2(100.0f, 25.0f)))
-		{
-			g_vPause = true;
-			g_gameT = 0.0f;
-		}
-		ImGui::SameLine();
-		const char* playButtonLabel = "Pause";
-		if (g_vPause)
-			playButtonLabel = "Play";
-
-		if (ImGui::Button(playButtonLabel, ImVec2(100.0f, 25.0f)))
-			g_vPause = !g_vPause;
-		
-		ImGui::SameLine();
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("Play Speed:");
-		ImGui::PopItemWidth();
-
-		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
-
-		if (ImGui::Button("Reload Shaders", ImVec2(200.0f + ItemSpacing, 25.0f)))
-		{
-			ReloadShaders();
-		}
-
-		ImGui::SameLine();
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::InputFloat("playback", &g_playSpeed, 0.01f);
-		ImGui::PopItemWidth();
-
-		ImGui::Separator();
-		ImGui::ColorEdit3("clear color", (float*)&g_clear_color); // Edit 3 floats representing a color
-
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::End();
-	}
+	if (buttonPress & 0x0001)
+		ReloadShaders();
 
 	// Constant buffer Data
-	{
-		ImGui::Begin("Constant Buffer Info");
-
-		ImGui::Separator();
-		ImGui::Separator();
-
-		ImGui::Text("Never Changes");
-
-		ImGui::Separator();
-
-		ImGui::Text("Resolution:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		D3D11_TEXTURE2D_DESC desc = {};
-		g_mRenderTargetTexture->GetDesc(&desc);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u x %u", (int)desc.Width, (int)desc.Height);
-		ImGui::PopItemWidth();
-
-		ImGui::Spacing();
-		ImGui::Text("ChanelResolution");
-
-		ImGui::Text("BufferA:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u x %u", (int)g_Resource[0].channelRes.x, (int)g_Resource[0].channelRes.y);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("BufferB:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u x %u", (int)g_Resource[1].channelRes.x, (int)g_Resource[1].channelRes.y);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("BufferC:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u x %u", (int)g_Resource[2].channelRes.x, (int)g_Resource[2].channelRes.y);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("BufferD:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u x %u", (int)g_Resource[3].channelRes.x, (int)g_Resource[3].channelRes.y);
-		ImGui::PopItemWidth();
-
-		ImGui::Spacing();
-
-		if (g_Resource[0].buffers.isActive && ImGui::TreeNode("BufferA Resources"))
-		{
-			ImGui::Text("BufferA:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[0].x, (int)g_Resource[0].buffers.mvChannelRes[0].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferB:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[1].x, (int)g_Resource[0].buffers.mvChannelRes[1].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferC:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[2].x, (int)g_Resource[0].buffers.mvChannelRes[2].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferD:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[0].buffers.mvChannelRes[3].x, (int)g_Resource[0].buffers.mvChannelRes[3].y);
-			ImGui::PopItemWidth();
-			ImGui::TreePop();
-		}
-
-		if (g_Resource[1].buffers.isActive && ImGui::TreeNode("BufferB Resources"))
-		{
-			ImGui::Text("BufferA:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[0].x, (int)g_Resource[1].buffers.mvChannelRes[0].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferB:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[1].x, (int)g_Resource[1].buffers.mvChannelRes[1].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferC:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[2].x, (int)g_Resource[1].buffers.mvChannelRes[2].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferD:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[1].buffers.mvChannelRes[3].x, (int)g_Resource[1].buffers.mvChannelRes[3].y);
-			ImGui::PopItemWidth();
-			ImGui::TreePop();
-		}
-
-		if (g_Resource[2].buffers.isActive && ImGui::TreeNode("BufferC Resources"))
-		{
-			ImGui::Text("BufferA:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[0].x, (int)g_Resource[2].buffers.mvChannelRes[0].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferB:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[1].x, (int)g_Resource[2].buffers.mvChannelRes[1].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferC:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[2].x, (int)g_Resource[2].buffers.mvChannelRes[2].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferD:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[2].buffers.mvChannelRes[3].x, (int)g_Resource[2].buffers.mvChannelRes[3].y);
-			ImGui::PopItemWidth();
-			ImGui::TreePop();
-		}
-
-		if (g_Resource[3].buffers.isActive && ImGui::TreeNode("BufferD Resources"))
-		{
-			ImGui::Text("BufferA:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[0].x, (int)g_Resource[3].buffers.mvChannelRes[0].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferB:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[1].x, (int)g_Resource[3].buffers.mvChannelRes[1].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferC:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[2].x, (int)g_Resource[3].buffers.mvChannelRes[2].y);
-			ImGui::PopItemWidth();
-
-			ImGui::Text("BufferD:");
-			ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-			ImGui::PushItemWidth(150.0f);
-			ImGui::Text("%u x %u", (int)g_Resource[3].buffers.mvChannelRes[3].x, (int)g_Resource[3].buffers.mvChannelRes[3].y);
-			ImGui::PopItemWidth();
-			ImGui::TreePop();
-		}
-
-		ImGui::Separator();
-		ImGui::Separator();
-
-		ImGui::Text("Changes Every Frame");
-
-		ImGui::Separator();
-
-		ImGui::Text("Frame:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%u", g_vFrame);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("Time:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%.3f sec", !g_vPause ? g_gameT + g_deltaT : g_gameT);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("Delta Time:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-		ImGui::PushItemWidth(150.0f);
-		ImGui::Text("%.5f ms", g_deltaT * 1000.0f);
-		ImGui::PopItemWidth();
-
-		ImGui::Text("Mouse:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 300.0f);
-		ImGui::PushItemWidth(300.0f);
-		ImGui::Text("x:%.4f y:%.4f LC:%u RC:%u", g_vMouse.x, g_vMouse.y, (int)g_vMouse.z, (int)g_vMouse.w);
-		ImGui::PopItemWidth();
-
-		// Get time
-		time_t now = time(0);
-		struct tm ltm;
-		localtime_s(&ltm, &now);
-		int hour = 1 + ltm.tm_hour;
-		int min = 1 + ltm.tm_min;
-		int sec = 1 + ltm.tm_sec;
-
-		ImGui::Text("Date:");
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 300.0f);
-		ImGui::PushItemWidth(300.0f);
-		ImGui::Text("%u:%u:%u %u seconds", ltm.tm_mday, 1 + ltm.tm_mon, 1900 + ltm.tm_year, ((hour * 60 + min) * 60) + sec);
-		ImGui::PopItemWidth();
-
-		ImGui::Separator();
-		ImGui::Separator();
-
-		ImGui::End();
-	}
+	ConstantBufferInfoWindow(g_pRenderTargetTexture, g_Resource, g_Buffers, g_iFrame, g_bPause, g_fGameT, g_fDeltaT, g_vMouse);
 
 	// Box for ShaderToy image to be displayed in
+	if (g_vCurrentWindowSize.x != g_vWindowSize.x && g_vCurrentWindowSize.y != g_vWindowSize.y)
 	{
-		ImGui::Begin("ShaderToy", 0, g_window_flags);
-
-		g_window_flags = ImGuiWindowFlags_NoMove;
-
-		g_trackMouse = false;
-
-		if (ImGui::IsWindowHovered())
-			g_trackMouse = true;
-
-		if (ImGui::IsItemHovered())
+		// Updating the texture size per buffer
+		for (int i = 0; i < 4; ++i)
 		{
-			g_window_flags = 0;
-			g_trackMouse = false;
+			if (g_Buffers[i].m_bIsActive)
+			{
+				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
+				
+				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(g_vWindowSize.x, g_vWindowSize.y, 0.0f, 0.0f);
+			}
 		}
 
-		ImVec2 windowSize = ImGui::GetWindowSize();
+		// Releasing objects before creating new ones
+		g_pRenderTargetTexture->Release();
+		g_pRenderTargetView->Release();
+		g_pShaderResourceView->Release();
 
-		switch (g_padding)
-		{
-		case 0:
-			ImGui::Image(g_pShaderResourceView, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			break;
-		case 1:
-			if (g_Resource[0].buffers.isActive)
-				ImGui::Image(g_Resource[0].buffers.mShaderResourceView, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			else
-				ImGui::Image(g_Resource[0].pShaderResource, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			break;
-		case 2:
-			if (g_Resource[1].buffers.isActive)
-				ImGui::Image(g_Resource[1].buffers.mShaderResourceView, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			else
-				ImGui::Image(g_Resource[1].pShaderResource, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			break;
-		case 3:
-			if (g_Resource[2].buffers.isActive)
-				ImGui::Image(g_Resource[2].buffers.mShaderResourceView, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			else
-				ImGui::Image(g_Resource[2].pShaderResource, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			break;
-		case 4:
-			if (g_Resource[3].buffers.isActive)
-				ImGui::Image(g_Resource[3].buffers.mShaderResourceView, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			else
-				ImGui::Image(g_Resource[3].pShaderResource, ImVec2(windowSize.x - 17, windowSize.y - 37), ImVec2(0, 0), ImVec2(1, 1));
-			break;
-		}
+		g_pDepthStencilView->Release();
+		g_pDepthStencilState->Release();
+		g_pDepthStencilBuffer->Release();
 
-		ImGui::End();
+		Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
+		CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
+
+		g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+		g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, NULL);
+
+		// Resizing the viewport
+		D3D11_VIEWPORT vp;
+		vp.Width = (FLOAT)g_vWindowSize.x;
+		vp.Height = (FLOAT)g_vWindowSize.y;
+		vp.MinDepth = 0.0f;
+		vp.MaxDepth = 1.0f;
+		vp.TopLeftX = 0;
+		vp.TopLeftY = 0;
+
+		g_pImmediateContext->RSSetViewports(1, &vp);
+
+		g_vCurrentWindowSize = g_vWindowSize;
 	}
 
-	// Toggle view
-	{
-		ImGui::Begin("View Toggle");
-		
-		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
-		ImVec2 windowSize = ImGui::GetWindowSize();
+	MainImageWindow(
+		g_pShaderResourceView,
+		g_Resource,
+		g_Buffers,
+		g_vWindowSize,
+		g_vCurrentWindowSize,
+		g_windowFlags, g_iPadding, g_bTrackMouse);
 
-		float bufferDButtonWidth = (windowSize.x) / 5.0f - 10.0f;
-		float pos = bufferDButtonWidth + ItemSpacing;
-		ImGui::SameLine(windowSize.x - pos);
-		if (ImGui::Button("Buffer D", ImVec2(bufferDButtonWidth, windowSize.y - 42.0f)))
-			g_padding = 4;
-		bufferDButtonWidth = ImGui::GetItemRectSize().x;
-
-		float bufferCButtonWidth = (windowSize.x) / 5.0f - 10.0f;
-		pos += bufferCButtonWidth + ItemSpacing;
-		ImGui::SameLine(windowSize.x - pos);
-		if (ImGui::Button("Buffer C", ImVec2(bufferCButtonWidth, windowSize.y - 42.0f)))
-			g_padding = 3;
-		bufferCButtonWidth = ImGui::GetItemRectSize().x;
-
-		float bufferBButtonWidth = (windowSize.x) / 5.0f - 10.0f;
-		pos += bufferBButtonWidth + ItemSpacing;
-		ImGui::SameLine(windowSize.x - pos);
-		if (ImGui::Button("Buffer B", ImVec2(bufferBButtonWidth, windowSize.y - 42.0f)))
-			g_padding = 2;
-		bufferBButtonWidth = ImGui::GetItemRectSize().x;
-
-		float bufferAButtonWidth = (windowSize.x) / 5.0f - 10.0f;
-		pos += bufferAButtonWidth + ItemSpacing;
-		ImGui::SameLine(windowSize.x - pos);
-		if (ImGui::Button("Buffer A", ImVec2(bufferAButtonWidth, windowSize.y - 42.0f)))
-			g_padding = 1;
-		bufferAButtonWidth = ImGui::GetItemRectSize().x;
-
-		float mainButtonWidth = (windowSize.x) / 5.0f - 10.0f;
-		pos += mainButtonWidth + ItemSpacing;
-		ImGui::SameLine(windowSize.x - pos);
-		if (ImGui::Button("Main", ImVec2(mainButtonWidth, windowSize.y - 42.0f)))
-			g_padding = 0;
-		mainButtonWidth = ImGui::GetItemRectSize().x;
-
-		ImGui::End();
-	}
+	int iHovered = -1;
 
 	// Box for the resources
-	{
-		ImGui::Begin("Resources");
+	ResourceWindow(g_pImmediateContext, g_Resource, g_Buffers, g_pTexturelib, g_iPadding, g_iPressIdentifier, iHovered);
 
-		ImVec2 windowSize = ImGui::GetWindowSize();
+	// Toggle view
+	ViewToggleWindow(g_iPadding, g_Buffers, iHovered);
 
-		ImVec2 texButtonSize = ImVec2(125.0f, 125.0f);
-
-		if (g_padding == 0)
-		{
-			// Main Image
-
-			if (g_Resource[0].buffers.isActive)
-			{
-				if (ImGui::ImageButton(g_Resource[0].buffers.mShaderResourceView, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					//g_pressIdentifier = 1;
-				}
-			}
-			else
-			{
-				if (ImGui::ImageButton(g_Resource[0].pShaderResource, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					g_pressIdentifier = 1;
-				}
-			}
-
-			if (g_Resource[1].buffers.isActive)
-			{
-				if (ImGui::ImageButton(g_Resource[1].buffers.mShaderResourceView, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					//g_pressIdentifier = 2;
-				}
-			}
-			else
-			{
-				if (ImGui::ImageButton(g_Resource[1].pShaderResource, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					g_pressIdentifier = 2;
-				}
-			}
-
-			if (g_Resource[2].buffers.isActive)
-			{
-				if (ImGui::ImageButton(g_Resource[2].buffers.mShaderResourceView, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					//g_pressIdentifier = 3;
-				}
-			}
-			else
-			{
-				if (ImGui::ImageButton(g_Resource[2].pShaderResource, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					g_pressIdentifier = 3;
-				}
-			}
-
-			if (g_Resource[3].buffers.isActive)
-			{
-				if (ImGui::ImageButton(g_Resource[3].buffers.mShaderResourceView, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					//g_pressIdentifier = 4;
-				}
-			}
-			else
-			{
-				if (ImGui::ImageButton(g_Resource[3].pShaderResource, ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-				{
-					g_pressIdentifier = 4;
-				}
-			}
-		}
-		else
-		{
-			// Buffers
-
-			if (ImGui::ImageButton(g_Resource[g_padding - 1].buffers.mpTextureRV[0], ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-			{
-				g_pressIdentifier = 1;
-			}
-			
-			if (ImGui::ImageButton(g_Resource[g_padding - 1].buffers.mpTextureRV[1], ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-			{
-				g_pressIdentifier = 2;
-			}
-
-			if (ImGui::ImageButton(g_Resource[g_padding - 1].buffers.mpTextureRV[2], ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-			{
-				g_pressIdentifier = 3;
-			}
-
-			if (ImGui::ImageButton(g_Resource[g_padding - 1].buffers.mpTextureRV[3], ImVec2(windowSize.x - 25.0f, (windowSize.y) / 4.0f - 18.0f), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f)))
-			{
-				g_pressIdentifier = 4;
-			}
-		}
-
-		// Resource picker
-		if (g_pressIdentifier)
-		{
-			if (ImGuiFileDialog::Instance(g_pd3dDevice)->FileDialog("Choose File", ".dds\0", ".", ""))
-			{
-				std::string filePathName = "";
-				std::string path = "";
-				std::string fileName = "";
-				std::string filter = "";
-
-				if (ImGuiFileDialog::Instance(g_pd3dDevice)->IsOk == true)
-				{
-					filePathName = ImGuiFileDialog::Instance(g_pd3dDevice)->GetFilepathName();
-					path = ImGuiFileDialog::Instance(g_pd3dDevice)->GetCurrentPath();
-					fileName = ImGuiFileDialog::Instance(g_pd3dDevice)->GetCurrentFileName();
-					filter = ImGuiFileDialog::Instance(g_pd3dDevice)->GetCurrentFilter();
-				}
-				else
-				{
-					filePathName = "";
-					path = "";
-					fileName = "";
-					filter = "";
-				}
-
-				Channel channel = Channel(std::string("textures/" + fileName).c_str());
-
-
-				if (g_padding == 0)
-				{
-					// Main image
-
-					// Load texture
-					LoadTexture(g_pd3dDevice, &g_Resource[(g_pressIdentifier - 1) + g_padding * 4].pShaderResource, channel.texture, g_Resource[(g_pressIdentifier - 1) + g_padding * 4].channelRes);
-
-					// Texture
-					g_pImmediateContext->PSSetShaderResources((g_pressIdentifier - 1) + g_padding * 4, 1, &g_Resource[(g_pressIdentifier - 1) + g_padding * 4].pShaderResource);
-				}
-				else
-				{
-					// Buffers
-
-					// Load texture
-					LoadTexture(g_pd3dDevice, &g_Resource[g_padding - 1].buffers.mpTextureRV[g_pressIdentifier - 1], channel.texture, g_Resource[(g_padding - 1)].buffers.mvChannelRes[g_pressIdentifier - 1]);
-
-					// Texture
-					g_pImmediateContext->PSSetShaderResources((g_pressIdentifier - 1) + g_padding * 4, 1, &g_Resource[g_padding - 1].buffers.mpTextureRV[g_pressIdentifier - 1]);
-				}
-
-				g_pressIdentifier = 0;
-				ImGuiFileDialog::Instance(g_pd3dDevice)->Clear();
-			}
-		}
-
-		ImGui::End();
-	}
+	// Shader Compiler Errors
+	ShaderErrorWindow(g_Buffers, g_eDefaultEditor);
 }
 
 //--------------------------------------------------------------------------------------
-// Reload the Shaders
+// Reload the Pixel Shaders
 //--------------------------------------------------------------------------------------
 void ReloadShaders()
 {
 	HRESULT hr = S_OK;
 
-	// Compile the vertex shader
-	ID3DBlob* pVSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/VertexShader.hlsl", "main", "vs_4_0", &pVSBlob);
-	if (FAILED(hr))
+	for (int i = 0; i < 4; ++i)
 	{
-		MessageBox(nullptr,
-			(LPCSTR)"Error with the vertex shader.", (LPCSTR)"Error", MB_OK);
-		return;
-	}
-
-	// Create the vertex shader
-	hr = g_pd3dDevice->CreateVertexShader(pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), nullptr, &g_pVertexShader);
-	pVSBlob->Release();
-	if (FAILED(hr))
-	{
-		MessageBox(nullptr,
-			(LPCSTR)"Error creating vertex shader.", (LPCSTR)"Error", MB_OK);
-		return;
+		if (g_Buffers[i].m_bIsActive)
+			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, i);
 	}
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob);
+	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 		return;
 	}
+
+	g_pPixelShader->Release();
+	g_pPixelShader = nullptr;
 
 	// Create the pixel shader
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
@@ -1437,10 +1064,4 @@ void ReloadShaders()
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
-
-	for (int i = 0; i < 4; ++i)
-	{
-		if (g_Resource[i].buffers.isActive)
-			g_Resource[i].buffers.ReloadShader(g_pd3dDevice, g_pVertexShader, i);
-	}
 }

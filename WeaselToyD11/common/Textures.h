@@ -7,15 +7,6 @@
 
 #include "type/Channel.h"
 
-enum TextLoc
-{
-	main = 0,
-	BufferA = 1,
-	BufferB = 2,
-	BufferC = 3,
-	BufferD = 4
-};
-
 HRESULT LoadTexture(
 	ID3D11Device*,
 	ID3D11ShaderResourceView**,
@@ -28,7 +19,7 @@ HRESULT CreateSampler(
 	ID3D11DeviceContext*,
 	ID3D11SamplerState**,
 	Channel,
-	const TextLoc,
+	const int,
 	const int 
 );
 
@@ -37,6 +28,15 @@ HRESULT Create2DTexture(
 	ID3D11Texture2D**,
 	ID3D11RenderTargetView**,
 	ID3D11ShaderResourceView**,
+	const UINT,
+	const UINT
+);
+
+HRESULT CreateDepthStencilView(
+	ID3D11Device*,
+	ID3D11DepthStencilView**,
+	ID3D11DepthStencilState**,
+	ID3D11Texture2D**,
 	const UINT,
 	const UINT
 );

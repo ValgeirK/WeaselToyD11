@@ -10,10 +10,10 @@ struct CBNeverChanges
 
 struct CBChangesEveryFrame
 {
-	DirectX::XMFLOAT4 Mouse;
-	DirectX::XMFLOAT4 Date;
-	float             Time;
-	float             TimeDelta;
-	int			      Frame;
-	int			      Padding;
+	DirectX::XMFLOAT4 m_vMouse;
+	DirectX::XMFLOAT4 m_vDate;
+	float             m_fTime;
+	float             m_fTimeDelta;
+	int			      m_iFrame;
+	int			      m_iPadding;
 };

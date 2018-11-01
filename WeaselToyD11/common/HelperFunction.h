@@ -1,26 +1,19 @@
 #pragma once
 
-#include <stdlib.h>
-#include <stddef.h>
-#include <ctime>
+#if defined(_DEBUG) || defined(PROFILE)
+#define USE_DEBUG_MARKERS
+#endif
 
-#include <windows.h>
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <directxmath.h>
-#include <directxcolors.h>
+#include <vector>
+#include <string.h>
+
+struct ID3D11DeviceChild;
 
 //--------------------------------------------------------------------------------------
 // Helper Functions
 //--------------------------------------------------------------------------------------
 
-template<UINT TNameLength>
-inline void SetDebugObjectName(_In_ ID3D11DeviceChild* resource, _In_ const char(&name)[TNameLength])
-{
-#if defined(_DEBUG) || defined(PROFILE)
-	resource->SetPrivateData(WKPDID_D3DDebugObjectName, TNameLength - 1, name);
-#else
-	UNREFERENCED_PARAMETER(resource);
-	UNREFERENCED_PARAMETER(name);
-#endif
-}
+void SetDebugObjectName(ID3D11DeviceChild* pResource, const char * pName);
+
+
+void SplitString(const std::string& inStr, std::vector<std::string>& container, char delim);

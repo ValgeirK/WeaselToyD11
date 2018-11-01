@@ -45,7 +45,7 @@ HRESULT CreateSampler(
 	ID3D11DeviceContext* pImmediateContext,
 	ID3D11SamplerState** pSampler,
 	Channel channel,
-	const TextLoc location,
+	const int location,
 	const int index
 )
 {
@@ -55,27 +55,27 @@ HRESULT CreateSampler(
 	D3D11_SAMPLER_DESC samplDesc = {};
 
 	// Set the right filter
-	switch (channel.filter)
+	switch (channel.m_Filter)
 	{
-	case FilterType::mipmap:
+	case Channels::FilterType::E_Mipmap:
 		samplDesc.Filter = D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
 		break;
-	case FilterType::linear:
+	case Channels::FilterType::E_Linear:
 		samplDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 		break;
-	case FilterType::nearest:
+	case Channels::FilterType::E_Nearest:
 		samplDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 	}
 
 	// Set the right wrapping
-	switch (channel.wrap)
+	switch (channel.m_Wrap)
 	{
-	case WrapType::clamp:
+	case Channels::WrapType::E_Clamp:
 		samplDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
 		samplDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 		samplDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 		break;
-	case WrapType::repeat:
+	case Channels::WrapType::E_Repeat:
 		samplDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -93,19 +93,19 @@ HRESULT CreateSampler(
 	int padding = 0;
 	switch (location)
 	{
-	case TextLoc::BufferA:
+	case 0:
 		padding = 1;
 		SetDebugObjectName(*pSampler, "BufferA_Sampler");
 		break;
-	case TextLoc::BufferB:
+	case 1:
 		padding = 2;
 		SetDebugObjectName(*pSampler, "BufferB_Sampler");
 		break;
-	case TextLoc::BufferC:
+	case 2:
 		padding = 3;
 		SetDebugObjectName(*pSampler, "BufferC_Sampler");
 		break;
-	case TextLoc::BufferD:
+	case 3:
 		padding = 4;
 		SetDebugObjectName(*pSampler, "BufferD_Sampler");
 		break;
@@ -200,6 +200,67 @@ HRESULT Create2DTexture(
 
 		hr = pd3dDevice->CreateShaderResourceView(*mRenderTargetTexture, &mShaderResourceViewDesc, mShaderResourceView);
 	}
+
+	return hr;
+}
+
+HRESULT CreateDepthStencilView(
+	ID3D11Device* device, 
+	ID3D11DepthStencilView** depthStencilView,
+	ID3D11DepthStencilState** depthStencilState,
+	ID3D11Texture2D** texture2D,
+	const UINT width,
+	const UINT height
+	)
+{
+	HRESULT hr = S_OK;
+
+	D3D11_TEXTURE2D_DESC depthStencilDesc;
+
+	depthStencilDesc.Width = width;
+	depthStencilDesc.Height = height;
+	depthStencilDesc.MipLevels = 1;
+	depthStencilDesc.ArraySize = 1;
+	depthStencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	depthStencilDesc.SampleDesc.Count = 1;
+	depthStencilDesc.SampleDesc.Quality = 0;
+	depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
+	depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	depthStencilDesc.CPUAccessFlags = 0;
+	depthStencilDesc.MiscFlags = 0;
+
+	D3D11_DEPTH_STENCIL_DESC dsDesc;
+
+	// Depth test parameters
+	dsDesc.DepthEnable = true;
+	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dsDesc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
+
+	// Stencil test parameters
+	dsDesc.StencilEnable = true;
+	dsDesc.StencilReadMask = 0xFF;
+	dsDesc.StencilWriteMask = 0xFF;
+
+	// Stencil operations if pixel is front-facing
+	dsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR;
+	dsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+	// Stencil operations if pixel is back-facing
+	dsDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR;
+	dsDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	dsDesc.BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+
+	// Create the Depth/Stencil View
+	hr = device->CreateTexture2D(&depthStencilDesc, NULL, texture2D);
+	hr = device->CreateDepthStencilView(*texture2D, NULL, depthStencilView);
+	hr = device->CreateDepthStencilState(&dsDesc, depthStencilState);
+
+	SetDebugObjectName(*texture2D, "DepthStencilBuffer");
+	SetDebugObjectName(*depthStencilView, "DepthStencilView");
+	SetDebugObjectName(*depthStencilState, "DepthStencilState");
 
 	return hr;
 }

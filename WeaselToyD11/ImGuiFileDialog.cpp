@@ -45,13 +45,13 @@ inline void AppendToBuffer(char* vBuffer, int vBufferLen, std::string vStr)
 	std::string st = vStr;
 	if (st != "" && st != "\n")
 		ReplaceString(st, "\n", "");
-	int slen = strlen(vBuffer);
+	int slen = (int)strlen(vBuffer);
 	vBuffer[slen] = '\0';
 	std::string str = std::string(vBuffer);
 	if (str.size() > 0) str += "\n";
 	str += vStr;
 	int len = vBufferLen - 1;
-	if (len > (int)str.size()) len = str.size();
+	if (len > (int)str.size()) len = (int)str.size();
 #ifdef MINGW32
 	strncpy_s(vBuffer, vBufferLen, str.c_str(), len);
 #else
@@ -68,12 +68,10 @@ inline void ResetBuffer(char* vBuffer)
 char ImGuiFileDialog::FileNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
 int ImGuiFileDialog::FilterIndex = 0;
 
-ImGuiFileDialog::ImGuiFileDialog(ID3D11Device* dev)
+ImGuiFileDialog::ImGuiFileDialog(TextureLib* texLib)
 {
-	// device
-	device = dev;
-
-	Create2DTexture(dev, &mRenderTargetTexture, nullptr, &mShaderResourceView, peakWidth, peakHeight);
+	// texture library
+	pTextureLib = texLib;
 }
 
 ImGuiFileDialog::~ImGuiFileDialog()
@@ -206,11 +204,21 @@ void ImGuiFileDialog::ComposeNewPath(std::vector<std::string>::iterator vIter)
 		m_CurrentPath = *vIter + "\\";
 }
 
-bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::string vPath, std::string vDefaultFileName)
+bool ImGuiFileDialog::FileDialog(const char* vName, std::string& vSelected, int iPadding, const char* vFilters, std::string vPath, std::string vDefaultFileName)
 {
 	bool res = false;
 
 	IsOk = false;
+
+	if (iPadding != m_CurrentPadding)
+	{
+		m_CurrentPadding = iPadding;
+		m_OldFileName = "";
+	}
+
+	if (m_OldFileName == "")
+		m_OldFileName = vSelected;
+
 
 	ImGui::Begin(vName);
 
@@ -283,23 +291,31 @@ bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::s
 				}
 				else
 				{
+					vSelected = std::string("textures/" + infos.fileName);
 					m_SelectedFileName = infos.fileName;
 					ResetBuffer(FileNameBuffer);
 					AppendToBuffer(FileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, m_SelectedFileName);
 				}
 				break;
 			}
-
+				
 			if (infos.type == 'f' && ImGui::IsItemHovered())
 			{
 				ImGuiIO& io = ImGui::GetIO();
 				ImVec2 pos = ImGui::GetCursorScreenPos();
-				DirectX::XMFLOAT4 res;
-				LoadTexture(device, &mShaderResourceView, std::string("textures/" + infos.fileName).c_str(), res);
+
+				pTextureLib->GetTexture(std::string("textures/" + infos.fileName).c_str(), &mShaderResourceView);
 
 				ImGui::BeginTooltip();
 				ImGui::Image(mShaderResourceView, ImVec2((float)peakWidth, (float)peakHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));
 				ImGui::EndTooltip();
+
+				if (infos.type == 'f' && ImGui::IsMouseDoubleClicked(0))
+				{
+					m_OldFileName = "";
+					IsOk = true;
+					res = true;
+				}
 			}
 		}
 	}
@@ -352,6 +368,8 @@ bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::s
 	
 	if (ImGui::Button("Cancel"))
 	{
+		vSelected = m_OldFileName;
+		m_OldFileName = "";
 		IsOk = false;
 		res = true;
 	}
@@ -360,6 +378,7 @@ bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::s
 
 	if (ImGui::Button("Ok"))
 	{
+		m_OldFileName = "";
 		IsOk = true;
 		res = true;
 	}

@@ -40,9 +40,9 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				sscanf(line, "%s %s", &dummy, &type);
 				
 				if (strcmp(type, "texture") == 0)
-					ch.type = ChannelType::texture;
+					ch.m_Type = Channels::ChannelType::E_Texture;
 				if (strcmp(type, "buffer") == 0)
-					ch.type = ChannelType::buffer;
+					ch.m_Type = Channels::ChannelType::E_Buffer;
 			}
 			case 's':
 			{
@@ -60,7 +60,7 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				sscanf(line, "%s %s", &dummy, &texturePath);
 
 				ch = Channel();
-				strncpy(ch.texture, texturePath, strlen(texturePath) + 1);
+				strncpy(ch.m_strTexture, texturePath, strlen(texturePath) + 1);
 				i++;
 
 				break;
@@ -73,11 +73,11 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				sscanf(line, "%s %s", &dummy, &filter);
 				
 				if(strcmp(filter, "mipmap") == 0)
-					ch.filter = FilterType::mipmap;
+					ch.m_Filter = Channels::FilterType::E_Mipmap;
 				if (strcmp(filter, "nearest") == 0)
-					ch.filter = FilterType::nearest;
+					ch.m_Filter = Channels::FilterType::E_Nearest;
 				if (strcmp(filter, "linear") == 0)
-					ch.filter = FilterType::linear;
+					ch.m_Filter = Channels::FilterType::E_Linear;
 
 				break;
 			}
@@ -89,11 +89,35 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				sscanf(line, "%s %s", &dummy, &wrap);
 
 				if (strcmp(wrap, "clamp") == 0)
-					ch.wrap = WrapType::clamp;
+					ch.m_Wrap = Channels::WrapType::E_Clamp;
 				if (strcmp(wrap, "repeat") == 0)
-					ch.wrap = WrapType::repeat;
+					ch.m_Wrap = Channels::WrapType::E_Repeat;
 
 				break;
+			}
+			case 'b':
+			{
+				// initialize the buffer id
+				char bufferId[2];
+
+				sscanf(line, "%s %s", &dummy, &bufferId);
+
+				if (strcmp(bufferId, "a") == 0)
+				{
+					ch.m_BufferId = Channels::BufferId::E_BufferA;
+				}
+				if (strcmp(bufferId, "b") == 0)
+				{
+					ch.m_BufferId = Channels::BufferId::E_BufferB;
+				}
+				if (strcmp(bufferId, "c") == 0)
+				{
+					ch.m_BufferId = Channels::BufferId::E_BufferC;
+				}
+				if (strcmp(bufferId, "d") == 0)
+				{
+					ch.m_BufferId = Channels::BufferId::E_BufferD;
+				}
 			}
 			default:
 				break;

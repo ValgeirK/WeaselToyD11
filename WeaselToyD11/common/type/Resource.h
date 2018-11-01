@@ -2,16 +2,19 @@
 
 #include <directxcolors.h>
 
-#include "Channel.h"
+struct ID3D11ShaderResourceView;
+struct ID3D11SamplerState;
 
-#include "../Buffer.h"
+#include "Channel.h"
 
 struct Resource
 {
-	Buffer					  buffers;
-	ID3D11ShaderResourceView* pShaderResource;
-	ID3D11SamplerState*		  pSampler;
-	DirectX::XMFLOAT4	      channelRes;
-	ChannelType				  type;
-	bool					  isActive;
+	ID3D11ShaderResourceView* m_pShaderResource = nullptr;
+	ID3D11SamplerState*		  m_pSampler = nullptr;
+	DirectX::XMFLOAT4	      m_vChannelRes;
+	char     				  m_strTexture[MAX_PATH];
+	Channels::ChannelType	  m_Type;
+	bool					  m_bIsActive;
+	int						  m_iSize;
+	int						  m_iBufferIndex;
 };

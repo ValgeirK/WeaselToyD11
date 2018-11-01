@@ -2,21 +2,26 @@
 
 #include <stdlib.h>
 #include <stddef.h>
+#include <string>
+#include <comdef.h>
 
 #include "Shader.h"
 #include "Loader.h"
 #include "Textures.h"
 #include "HelperFunction.h"
+#include "TextureLib.h"
 #include "type/Channel.h"
 #include "type/ConstantBuffer.h"
 
 HRESULT Buffer::InitBuffer(
-	ID3D11Device*        pd3dDevice, 
-	ID3D11DeviceContext* pImmediateContext, 
+	ID3D11Device*        pd3dDevice,
+	ID3D11DeviceContext* pImmediateContext,
 	ID3D11VertexShader*  pVertShader,
-	const int width, 
-	const int height, 
-	const int index
+	TextureLib*			 pTextureLib,
+	Buffer*				 pBuffer,
+	const int			 width, 
+	const int			 height, 
+	Channels::BufferId   index
 )
 {
 	HRESULT hr = S_OK;
@@ -24,98 +29,135 @@ HRESULT Buffer::InitBuffer(
 	// Reading in Channel file for this channel
 	const char* channelPath = "";
 	const WCHAR* pixelShaderPath = (wchar_t *)malloc(sizeof(wchar_t) * 100);
+	int padding = 0;
 
 	switch (index)
 	{
 	case 0:
 		channelPath = "channels/channelsA.txt";
 		pixelShaderPath = L"shaders/PixelShaderBufferA.hlsl";
+		padding = 1;
 		break;
 	case 1:
 		channelPath = "channels/channelsB.txt";
 		pixelShaderPath = L"shaders/PixelShaderBufferB.hlsl";
+		padding = 2;
 		break;
 	case 2:
 		channelPath = "channels/channelsC.txt";
 		pixelShaderPath = L"shaders/PixelShaderBufferC.hlsl";
+		padding = 3;
 		break;
 	case 3:
 		channelPath = "channels/channelsD.txt";
 		pixelShaderPath = L"shaders/PixelShaderBufferD.hlsl";
+		padding = 4;
 		break;
 	}
 
-	mpVertexShader = pVertShader;
-
-	hr = Create2DTexture(pd3dDevice, &mRenderTargetTexture, &mRenderTargetView, &mShaderResourceView, width, height);
+	m_pVertexShader = pVertShader;
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBufferBlob = nullptr;
-	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob);
+	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
 	if (FAILED(hr))
 	{
+		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
+		{
+			_bstr_t b(pixelShaderPath);
+			const char* c = b;
+			std::string msg = "Error Pixel Shader \"" + std::string(c) + "\" not found!";
+
+			MessageBox(nullptr,
+				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
+		}
+
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 		return hr;
 	}
 
+	hr = Create2DTexture(pd3dDevice, &m_pRenderTargetTexture, &m_pRenderTargetView, &m_pShaderResourceView, width, height);
+
 	// Create the pixel shader
-	hr = pd3dDevice->CreatePixelShader(pPSBufferBlob->GetBufferPointer(), pPSBufferBlob->GetBufferSize(), nullptr, &mpPixelShader);
+	hr = pd3dDevice->CreatePixelShader(pPSBufferBlob->GetBufferPointer(), pPSBufferBlob->GetBufferSize(), nullptr, &m_pPixelShader);
 	pPSBufferBlob->Release();
 	if (FAILED(hr))
 		return hr;
 
-	SetDebugObjectName(mpPixelShader, "BufferPixelShader");
+	SetDebugObjectName(m_pPixelShader, "BufferPixelShader");
 
-	int size = 0;
-	if (!LoadChannels(channelPath, channels, size))
+	if (!LoadChannels(channelPath, m_Channels, m_iSize))
 		return S_FALSE;
 
-	TextLoc location = TextLoc::main;
-	int padding = 0;
-
-	switch (index)
-	{
-	case 0:
-		location = TextLoc::BufferA;
-		padding = 1;
-		break;
-	case 1:
-		location = TextLoc::BufferB;
-		padding = 2;
-		break;
-	case 2:
-		location = TextLoc::BufferC;
-		padding = 3;
-		break;
-	case 3:
-		location = TextLoc::BufferD;
-		padding = 4;
-		break;
-	}
-
 	// Load texture
-	for (int i = 0; i < size; ++i)
+	for (int i = 0; i < m_iSize; ++i)
 	{
-		if (channels[i].type == ChannelType::texture)
+		int iBufferIndex = static_cast<int>(index);
+		if (m_Channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
-			LoadTexture(pd3dDevice, &mpTextureRV[i], channels[i].texture, mvChannelRes[i]);
+			m_Res[i].m_Type = Channels::ChannelType::E_Texture;
+
+			strcpy(m_Res[i].m_strTexture, m_Channels[i].m_strTexture);
+
+			pTextureLib->GetTexture(m_Channels[i].m_strTexture, &m_Res[i].m_pShaderResource, m_Res[i].m_vChannelRes);
 
 			// Texture
-			pImmediateContext->PSSetShaderResources(i + padding * 4, 1, &mpTextureRV[i]);
+			pImmediateContext->PSSetShaderResources(i + padding * 4, 1, &m_Res[i].m_pShaderResource);
 		}
-		else if (channels[i].type == ChannelType::buffer)
+		else if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
-			Create2DTexture(pd3dDevice, &mRenderTargetTextureCopy, nullptr, &mShaderResourceViewCopy, width, height);
+			m_Res[i].m_Type = Channels::ChannelType::E_Buffer;
+
+			// Initialize buffer
+			pBuffer[static_cast<int>(m_Channels[i].m_BufferId)].InitBuffer(pd3dDevice, pImmediateContext, pVertShader, pTextureLib, pBuffer, width, height, m_Channels[i].m_BufferId);
+
+			m_Res[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+			m_Res[i].m_iBufferIndex = static_cast<int>(m_Channels[i].m_BufferId);
+
+			Create2DTexture(pd3dDevice, &m_pRenderTargetTextureCopy, nullptr, &m_pShaderResourceViewCopy, width, height);
+			
+			// There is a buffer that needs resizing
+			m_bResizeBuffer = true;
+		}
+		else
+		{
+			m_Res[i].m_pShaderResource = nullptr;
 		}
 
 		// Create Sampler for buffer
-		CreateSampler(pd3dDevice, pImmediateContext, &mpSampler[i], channels[i], location, i);
+		CreateSampler(pd3dDevice, pImmediateContext, &m_pSampler[i], m_Channels[i], iBufferIndex, i);
 	}
 
-	isActive = true;
+	m_bIsActive = true;
 
 	return hr;
+}
+
+void Buffer::ResizeTexture(ID3D11Device* device, ID3D11DeviceContext* context, const UINT width, const UINT height)
+{
+	if (m_pRenderTargetTexture)m_pRenderTargetTexture->Release();
+	if (m_pRenderTargetView)m_pRenderTargetView->Release();
+	if (m_pShaderResourceView)m_pShaderResourceView->Release();
+
+	Create2DTexture(device, &m_pRenderTargetTexture, &m_pRenderTargetView, &m_pShaderResourceView, width, height);
+
+	if (m_bResizeBuffer)
+	{
+		if (m_pRenderTargetTextureCopy)m_pRenderTargetTextureCopy->Release();
+		if (m_pShaderResourceViewCopy)m_pShaderResourceViewCopy->Release();
+
+		Create2DTexture(device, &m_pRenderTargetTextureCopy, nullptr, &m_pShaderResourceViewCopy, width, height);
+	}
+
+	for(int i = 0; i < 4; ++i)
+	{
+		if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
+		{
+			m_Res[i].m_vChannelRes.x = (float)width;
+			m_Res[i].m_vChannelRes.y = (float)height;
+		}
+	}
 }
 
 HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVertShader, const int index)
@@ -145,20 +187,34 @@ HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVer
 		break;
 	}
 
-	mpVertexShader = pVertShader;
+	m_pVertexShader = pVertShader;
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBufferBlob = nullptr;
-	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob);
+	m_ShaderError.clear();
+	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
 	if (FAILED(hr))
 	{
+		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
+		{
+			_bstr_t b(pixelShaderPath);
+			const char* c = b;
+			std::string msg = "Error Pixel Shader \"" + std::string(c) + "\" not found!";
+
+			MessageBox(nullptr,
+				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
+		}
+
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+
 		return hr;
 	}
 
+	m_pPixelShader->Release();
+
 	// Create the pixel shader
-	hr = pd3dDevice->CreatePixelShader(pPSBufferBlob->GetBufferPointer(), pPSBufferBlob->GetBufferSize(), nullptr, &mpPixelShader);
+	hr = pd3dDevice->CreatePixelShader(pPSBufferBlob->GetBufferPointer(), pPSBufferBlob->GetBufferSize(), nullptr, &m_pPixelShader);
 	pPSBufferBlob->Release();
 	if (FAILED(hr))
 		return hr;
@@ -168,21 +224,20 @@ HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVer
 
 void Buffer::SetShaderResource(ID3D11DeviceContext* pImmediateContext, const int index)
 {
-	pImmediateContext->PSSetShaderResources(index, 1, &mShaderResourceView);
+	pImmediateContext->PSSetShaderResources(index, 1, &m_pShaderResourceView);
 }
 
-void Buffer::ClearShaderResource(ID3D11DeviceContext* pImmediateContext, const int index)
+void Buffer::ClearShaderResource(ID3D11DeviceContext* pImmediateContext, ID3D11DepthStencilView* pDepthStencilView)
 {
 	ID3D11ShaderResourceView* renderNull = nullptr;
-	pImmediateContext->PSSetShaderResources(index, 1, &renderNull);
+	for(int i = 0; i < 4; ++i)
+		pImmediateContext->PSSetShaderResources(i, 1, &renderNull);
+	
+	ID3D11RenderTargetView* viewNull = nullptr;
+	pImmediateContext->OMSetRenderTargets(1, &viewNull, pDepthStencilView);
+
 	if (renderNull) renderNull->Release();
-}
-
-void Buffer::RecursiveRender(ID3D11DeviceContext* pImmediateContext, const int index)
-{
-	ClearShaderResource(pImmediateContext, index);
-
-	pImmediateContext->CopyResource(mRenderTargetTextureCopy, mRenderTargetTexture);
+	if (viewNull) viewNull->Release();
 }
 
 void Buffer::Render(
@@ -195,29 +250,53 @@ void Buffer::Render(
 	const int index
 )
 {
+	ClearShaderResource(pImmediateContext, pDepthStencilView);
+
+	int padding = 0;
+	switch (index)
+	{
+	case 0:
+		padding = 1;
+		break;
+	case 1:
+		padding = 2;
+		break;
+	case 2:
+		padding = 3;
+		break;
+	case 3:
+		padding = 4;
+		break;
+	}
+
+
 	for (int i = 0; i < 4; ++i)
 	{
-		if (channels[i].type == ChannelType::buffer)
+		if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
-			pImmediateContext->CopyResource(mRenderTargetTextureCopy, mRenderTargetTexture);
-			pImmediateContext->PSSetShaderResources(i + (index + 1)* 4, 1, &mShaderResourceViewCopy);
+			pImmediateContext->CopyResource(m_pRenderTargetTextureCopy, m_pRenderTargetTexture);
+			pImmediateContext->PSSetShaderResources(i + (index + 1)* 4, 1, &m_pShaderResourceViewCopy);
+		}
+		else
+		{
+			pImmediateContext->PSSetShaderResources(i + padding * 4, 1, &m_Res[i].m_pShaderResource);
 		}
 	}
 
 	// Set the shaders
-	pImmediateContext->VSSetShader(mpVertexShader, nullptr, 0);
-	pImmediateContext->PSSetShader(mpPixelShader, nullptr, 0);
+	pImmediateContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	pImmediateContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	pImmediateContext->OMSetRenderTargets(1, &mRenderTargetView, pDepthStencilView);
+	pImmediateContext->OMSetRenderTargets(1, &m_pRenderTargetView, pDepthStencilView);
 
-	pImmediateContext->ClearRenderTargetView(mRenderTargetView, DirectX::Colors::Aqua);
+	pImmediateContext->ClearRenderTargetView(m_pRenderTargetView, DirectX::Colors::Aqua);
 
 	CBNeverChanges cbNC;
 	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
-	cbNC.ChannelResolution[0] = mvChannelRes[0];
-	cbNC.ChannelResolution[1] = mvChannelRes[1];
-	cbNC.ChannelResolution[2] = mvChannelRes[2];
-	cbNC.ChannelResolution[3] = mvChannelRes[3];
+	cbNC.ChannelResolution[0] = m_Res[0].m_vChannelRes;
+	cbNC.ChannelResolution[1] = m_Res[1].m_vChannelRes;
+	cbNC.ChannelResolution[2] = m_Res[2].m_vChannelRes;
+	cbNC.ChannelResolution[3] = m_Res[3].m_vChannelRes;
 
 	pImmediateContext->UpdateSubresource(pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
@@ -230,22 +309,64 @@ void Buffer::Render(
 	ID3D11RenderTargetView* renderNull = nullptr;
 	pImmediateContext->OMSetRenderTargets(1, &renderNull, nullptr);
 	if (renderNull) renderNull->Release();
+
+	SetShaderResource(pImmediateContext, index);
 }
 
 void Buffer::Release(int index)
 {
-	for (int i = 0; i < 4; ++i)
+	ULONG refs = 0;
+
+	for (int i = 0; i < m_iSize; ++i)
 	{
-		if (mpSampler[i]) mpSampler[i]->Release();
-		if (mpTextureRV[i]) mpTextureRV[i]->Release();
+		if (m_pSampler[i])
+			refs = m_pSampler[i]->Release();
+		else
+			refs = 0;
+
+		if (refs > 0)
+			_RPTF2(_CRT_WARN, "Buffer Sampler %i still has %i references.\n", i, refs);
 	}
 
-	if (mRenderTargetTextureCopy) mRenderTargetTextureCopy->Release();
-	if (mShaderResourceViewCopy) mShaderResourceViewCopy->Release();
+	if (m_pRenderTargetTextureCopy)
+		refs = m_pRenderTargetTextureCopy->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer RenderTargetTextureCopy still has %i references.\n", refs);
 
-	if (mpPixelShader) mpPixelShader->Release();
-	if (mRenderTargetTexture) mRenderTargetTexture->Release();
-	if (mRenderTargetView) mRenderTargetView->Release();
+	if (m_pShaderResourceViewCopy)
+		refs = m_pShaderResourceViewCopy->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer ShaderResourceViewCopy still has %i references.\n", refs);
+	
+	if (m_pPixelShader)
+		refs = m_pPixelShader->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer PixelShader still has %i references.\n", refs);
 
-	if (mShaderResourceView) mShaderResourceView->Release();
+	if (m_pRenderTargetTexture)
+		refs = m_pRenderTargetTexture->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer RenderTargetTexture still has %i references.\n", refs);
+
+	if (m_pRenderTargetView)
+		refs = m_pRenderTargetView->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer RenderTargetView still has %i references.\n", refs);
+
+	if (m_pShaderResourceView)
+		refs = m_pShaderResourceView->Release();
+	else
+		refs = 0;
+	if (refs > 0)
+		_RPTF2(_CRT_WARN, "Buffer ShaderResourceView still has %i references.\n", refs);
 }

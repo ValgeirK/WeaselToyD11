@@ -1,34 +1,45 @@
 #pragma once
 
-#include <stdio.h>
+#include <cstring>
 
-enum ChannelType
+namespace Channels
 {
-	texture = 0,
-	buffer = 1
-};
+	enum ChannelType
+	{
+		E_Texture = 0,
+		E_Buffer = 1
+	};
 
-enum FilterType
-{
-	mipmap = 0,
-	nearest = 1,
-	linear = 2
-};
+	enum FilterType
+	{
+		E_Mipmap = 0,
+		E_Nearest = 1,
+		E_Linear = 2
+	};
 
-enum WrapType
-{
-	clamp = 0,
-	repeat = 1
-};
+	enum WrapType
+	{
+		E_Clamp = 0,
+		E_Repeat = 1
+	};
+
+	enum BufferId
+	{
+		E_BufferA = 0,
+		E_BufferB = 1,
+		E_BufferC = 2,
+		E_BufferD = 3
+	};
+}
 
 struct Channel
 {
 	Channel() {};
-	Channel(const char path[]) { strcpy(texture, path); };
+	Channel(const char path[]) { strcpy(m_strTexture, path); };
 
-	ChannelType type;
-	int BufferId;
-	char texture[50];
-	FilterType filter;
-	WrapType wrap;
+	Channels::ChannelType	m_Type;
+	char					m_strTexture[50];
+	Channels::FilterType	m_Filter;
+	Channels::WrapType		m_Wrap;
+	Channels::BufferId		m_BufferId;
 };

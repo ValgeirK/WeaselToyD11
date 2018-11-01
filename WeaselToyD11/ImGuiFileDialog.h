@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 
+#include "common/TextureLib.h"
+
 #define MAX_FILE_DIALOG_NAME_BUFFER 1024
 
 struct FileInfoStruct
@@ -21,14 +23,16 @@ class ImGuiFileDialog
 private:
 	std::vector<FileInfoStruct> m_FileList;
 	std::string m_SelectedFileName;
+	std::string m_OldFileName = "";
 	std::string m_CurrentPath;
 	std::vector<std::string> m_CurrentPath_Decomposition;
 	std::string m_CurrentFilterExt;
+	int m_CurrentPadding = -1;
 
 	int						   peakWidth = 256;
 	int						   peakHeight = 256;
 
-	ID3D11Device*			   device;
+	TextureLib*				   pTextureLib;
 
 	ID3D11Texture2D*		   mRenderTargetTexture;
 	ID3D11ShaderResourceView*  mShaderResourceView;
@@ -39,17 +43,17 @@ public:
 	bool IsOk;
 
 public:
-	static ImGuiFileDialog* Instance(ID3D11Device* dev)
+	static ImGuiFileDialog* Instance(TextureLib* texLib)
 	{
-		static ImGuiFileDialog *_instance = new ImGuiFileDialog(dev);
+		static ImGuiFileDialog *_instance = new ImGuiFileDialog(texLib);
 		return _instance;
 	}
 
 public:
-	ImGuiFileDialog(ID3D11Device*);
+	ImGuiFileDialog(TextureLib*);
 	~ImGuiFileDialog();
 
-	bool FileDialog(const char* vName, const char* vFilters = 0, std::string vPath = ".", std::string vDefaultFileName = "");
+	bool FileDialog(const char* vName, std::string& vSelected, int iPadding, const char* vFilters = 0, std::string vPath = ".", std::string vDefaultFileName = "");
 	void Clear();
 	std::string GetFilepathName();
 	std::string GetCurrentPath();

@@ -33,6 +33,19 @@
       <Filter>common</Filter>
     </ClCompile>
     <ClCompile Include="ImGuiFileDialog.cpp" />
+    <ClCompile Include="common\TextureLib.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\FileIO.cpp" />
+    <ClCompile Include="common\HelperFunction.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\Shader.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\ImGuiWindows.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\imgui_impl_dx11.h">
@@ -90,6 +103,13 @@
     <ClInclude Include="dirent\dirent.h">
       <Filter>dirent</Filter>
     </ClInclude>
+    <ClInclude Include="common\TextureLib.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\FileIO.h" />
+    <ClInclude Include="common\ImGuiWindows.h">
+      <Filter>common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="common">
@@ -104,5 +124,8 @@
     <Filter Include="dirent">
       <UniqueIdentifier>{560ee03d-2c47-4ac9-b565-387bc1d6f1f8}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
