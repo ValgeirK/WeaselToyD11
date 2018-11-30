@@ -8,6 +8,10 @@
 #include <directxmath.h>
 #include <directxcolors.h>
 
+#include "../lib/imgui.h"
+#include "../lib/imgui_impl_dx11.h"
+#include "../lib/imgui_impl_win32.h"
+
 #include <vector>
 #include <string.h>
 #include <sstream>
@@ -34,4 +38,42 @@ void SplitString(const std::string& inStr, std::vector<std::string>& container, 
 	while (std::getline(ss, token, delim)) {
 		container.push_back(token);
 	}
+}
+
+void ImGuiScaleMove(ImVec4& vWindow, float xScale, float yScale)
+{
+	vWindow.x *= xScale;
+	vWindow.y *= yScale;
+	vWindow.z *= xScale;
+	vWindow.w *= yScale;
+}
+
+void DefaultEditorStrFix(std::string& str)
+{
+	std::string newStr = "";
+	std::string word = "";
+	bool hasSpace = false;
+	for (int i = 0; i < str.length(); ++i)
+	{
+		if (str.at(i) == '\\')
+		{
+			if (word.length() > 0)
+			{
+				if(hasSpace)
+					newStr += std::string("\"") + word + std::string("\"") + std::string("\\");
+				else
+					newStr += word + std::string("\\");
+			}
+
+			word = "";
+			hasSpace = false;
+		}
+		else
+			word += str.at(i);
+
+		if (str.at(i) == ' ')
+			hasSpace = true;
+	}
+
+	str = newStr + word;
 }

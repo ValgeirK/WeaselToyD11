@@ -1,4 +1,5 @@
 #include <ctime>
+#include <chrono>
 
 #include "lib/imgui.h"
 #include "lib/imgui_impl_dx11.h"
@@ -8,7 +9,7 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include <directxcolors.h>
-//#include <pix3.h>
+#include <pix3.h>
 #include <string.h>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "common/HelperFunction.h"
 #include "common/TextureLib.h"
 #include "common/ImGuiWindows.h"
+#include "common/RegisterHelper.h"
 #include "common/type/ConstantBuffer.h"
 #include "common/type/Channel.h"
 #include "common/type/Resource.h"
@@ -110,27 +112,55 @@ ID3D11Buffer*			    g_pIndexBuffer = nullptr;
 // Constant buffers
 ID3D11Buffer*               g_pCBNeverChanges = nullptr;
 ID3D11Buffer*               g_pCBChangesEveryFrame = nullptr;
+ID3D11Buffer*               g_pCBCustomizable = nullptr;
 
 // Demo
 TextureLib*					g_pTexturelib;
+Channel						g_Channels[4];
 DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
+RECT						g_vAppSize = { 0, 0, 0, 0 };
 ImVec2						g_vCurrentWindowSize;
 ImVec2						g_vWindowSize;
+ImVec2						g_vPadding = ImVec2(16.0f, 65.0f);
 ImGuiWindowFlags			g_windowFlags;
 float				        g_fLastT = 0.0f;
 float						g_fDeltaT = 0.0f;
 float						g_fGameT = 0.0f;
 float						g_fPauseT = 0;
+float						g_fDPIscale = 1.0f;
 int						    g_iFrame = 0;
 bool			            g_bPause = false;
 ImVec4						g_vClearColor = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
 int							g_iPressIdentifier = 0;
 int							g_iPadding = 0;
 bool					    g_bTrackMouse = false;
+bool						g_bFullscreen = false;
+bool						g_bResChanged = false;
+bool						g_bFullWindow = false;
+bool						g_bCtrl = false;
+bool						g_bAlt = false;
+bool						g_bAutoReload = false;
+bool						g_bNewProjLoad = false;
+bool						g_bDefaultEditorSelected = false;
 float						g_fPlaySpeed = 1.0f;
+time_t						g_tTimeCreated;
 std::vector<std::string>	g_vShaderErrorList;
+std::string					g_strProject = "Test";
+std::string					g_strDefaultEditor = "";
+
 ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPADPP;
+ImGuiEnum::AspectRatio		g_eAspectRatio = ImGuiEnum::AspectRatio::E_NONE;
+ImGuiEnum::Resolution		g_eResolution = ImGuiEnum::Resolution::E_CUSTOM;
+
+ImVec4						g_vResourceWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+ImVec4						g_vMainImageWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+ImVec4						g_vControlWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+ImVec4						g_vViewToggleWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+ImVec4						g_vShaderErrorWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+std::vector<CustomizableBuffer> g_vCustomizableBuffer;
+std::chrono::high_resolution_clock::time_point	g_tLastClick;
 
 
 
@@ -139,16 +169,41 @@ ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPADP
 //--------------------------------------------------------------------------------------
 HRESULT				InitWindow(HINSTANCE hInstance, int nCmdShow);
 HRESULT				InitDevice();
-HRESULT				InitTextures();
+HRESULT				InitResources(bool);
+HRESULT				LoadProject();
 void				CleanupDevice();
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 void				Render();
 void				ReloadShaders();
+void				Resize(const float, const float);
 
 void				InitImGui();
 void				ImGuiSetup(HINSTANCE);
 void				ImGuiRender();
 
+
+void PopulateInitialVariables()
+{
+	int enumEditor = 1;
+	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColor, g_vAppSize, enumEditor, g_bAutoReload);
+	g_eDefaultEditor = static_cast<ImGuiEnum::DefaultEditor>(enumEditor);
+
+	if (g_strDefaultEditor != "" || exists == 1)
+		g_bDefaultEditorSelected = true;
+	else
+	{
+		std::wstring strKeyDefaultValue;
+		GetStringRegKey(
+			static_cast<int>(g_eDefaultEditor),
+			L"",
+			strKeyDefaultValue,
+			L"bad"
+		);
+
+		if (strKeyDefaultValue.length() > 0)
+			std::copy(g_strDefaultEditor.begin(), g_strDefaultEditor.end(), strKeyDefaultValue.begin());
+	}
+}
 
 //--------------------------------------------------------------------------------------
 // Entry point to the program. Initializes everything and goes into a message processing 
@@ -163,13 +218,15 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
+	PopulateInitialVariables();
+
 	if (FAILED(InitWindow(hInstance, nCmdShow)))
 		return 0;
 
 	//MessageBox(nullptr,
 	//	(LPCSTR)"Start Pix.", (LPCSTR)"Error", MB_OK);
 
-	//PIXBeginEvent(0, "Initializing Device");
+	PIXBeginEvent(0, "Initializing Device");
 	{
 		if (FAILED(InitDevice()))
 		{
@@ -177,9 +234,11 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			return 0;
 		}
 	}
-	//PIXEndEvent(); // Initializing Device
+	PIXEndEvent(); // Initializing Device
 
 	InitImGui();
+
+	g_tLastClick = std::chrono::high_resolution_clock::now();
 
 	// Main message loop
 	MSG msg = { 0 };
@@ -194,35 +253,49 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		{
 			byte col = 0;
 
-			//PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
+			PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
 			{
+				// Possibly change project
+				if (g_bNewProjLoad)
+				{
+					LoadProject();
+					g_bNewProjLoad = false;
+				}
+
 				// Render the ShaderToy image
-				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "Render");
+				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Render");
 				{
 					Render();
 				}
-				//PIXEndEvent(); // RENDER
+				PIXEndEvent(); // RENDER
 
-				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
+				if (!g_bFullscreen)
 				{
-					ImGuiSetup(hInstance);
+					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
+					{
+						ImGuiSetup(hInstance);
+					}
+					PIXEndEvent(); // IMGUISETUP
+
+
+					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
+					{
+						ImGuiRender();
+					}
+					PIXEndEvent();
 				}
-				//PIXEndEvent(); // IMGUISETUP
 
-
-				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
+				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Present");
 				{
-					ImGuiRender();
+					//D3D_VERIFY(g_pSwapChain->Present(1, 0));
+					HRESULT hr = S_OK;
+					hr = g_pSwapChain->Present(1, 0);
+					if(hr != S_OK)
+						_RPTF2(_CRT_WARN, "Present error %i.\n", ((hr) & 0x0000FFFF));
 				}
-				//PIXEndEvent();
-
-				//PIXBeginEvent(PIX_COLOR_INDEX(col++), "Present");
-				{
-					D3D_VERIFY(g_pSwapChain->Present(1, 0));
-				}
-				//PIXEndEvent(); // PRESENT
+				PIXEndEvent(); // PRESENT
 			}
-			//PIXEndEvent(); // MAIN LOOP
+			PIXEndEvent(); // MAIN LOOP
 		}
 	}
 
@@ -257,17 +330,20 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow)
 	// Create window
 	g_hInst = hInstance;
 	
-	// Get desktop resolution
-	const HWND hDesktop = GetDesktopWindow();
-	RECT desktop;
-	GetWindowRect(hDesktop, &desktop);
+	if (g_vAppSize.right == 0 || g_vAppSize.bottom == 0)
+	{
+		// Get desktop resolution
+		const HWND hDesktop = GetDesktopWindow();
+		RECT desktop;
+		GetWindowRect(hDesktop, &desktop);
+		g_vAppSize = { 0, 0, desktop.right * 2 / 3, desktop.bottom * 2 / 3 };
+		g_vWindowSize = ImVec2((float)(desktop.right * 2 / 3), (float)(desktop.bottom * 2 / 3));
+	}
 
-	RECT rc = { 0, 0, desktop.right * 2 / 3, desktop.bottom * 2 / 3 };
-	g_vWindowSize = ImVec2((float)(desktop.right * 2 / 3), (float)(desktop.bottom * 2 / 3));
-	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
+	AdjustWindowRect(&g_vAppSize, WS_OVERLAPPEDWINDOW, FALSE);
 	g_hWnd = CreateWindow((LPCSTR)"TutorialWindowClass", (LPCSTR)"WeaselToyD11",
-		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, nullptr, nullptr, hInstance,
+		WS_OVERLAPPEDWINDOW | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+		CW_USEDEFAULT, CW_USEDEFAULT, g_vAppSize.right - g_vAppSize.left, g_vAppSize.bottom - g_vAppSize.top, nullptr, nullptr, hInstance,
 		nullptr);
 	if (!g_hWnd)
 		return E_FAIL;
@@ -301,13 +377,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PostQuitMessage(0);
 		break;
 
-		// Note that this tutorial does not handle resizing (WM_SIZE) requests,
-		// so we created the window without the resize border.
-
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
-			case 'R':
+			case VK_F11:
+				g_bFullscreen = !g_bFullscreen;
+				break;
 			case VK_F5:
 				// Reload Shaders
 				ReloadShaders();
@@ -317,11 +392,129 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				// Pause
 				g_bPause = !g_bPause;
 				break;
+			case VK_CONTROL:
+				g_bCtrl = true;
+				break;
 			case VK_ESCAPE:
-				DestroyWindow(hWnd);
+				if (g_bFullscreen)
+					g_bFullscreen = false;
+				break;
+			case 'Q':
+				// Quit
+				if (g_bCtrl)
+					DestroyWindow(hWnd);
 				break;
 		}
 		break;
+	case WM_SYSKEYDOWN:
+		switch (wParam)
+		{
+		case VK_MENU:
+			g_bAlt = true;
+			break;
+		}
+		break;
+	case WM_SYSKEYUP:
+		switch (wParam)
+		{
+		case VK_MENU:
+			g_bAlt = false;
+			break;
+		case VK_RETURN:
+			if (g_bAlt)
+			{
+				if (!g_bFullWindow)
+				{
+					const HWND hDesktop = GetDesktopWindow();
+					RECT desktop;
+					GetWindowRect(hDesktop, &desktop);
+
+					g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+
+					// Release all outstanding references to the swap chain's buffers.
+					g_pBackBufferRenderTargetView->Release();
+
+					HRESULT hr;
+					// Preserve the existing buffer count and format.
+					// Automatically choose the width and height to match the client rect for HWNDs.
+					hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+					// Perform error handling here!
+
+					// Get buffer and create a render-target-view.
+					ID3D11Texture2D* pBuffer;
+					hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+						(void**)&pBuffer);
+					// Perform error handling here!
+
+					hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
+						&g_pBackBufferRenderTargetView);
+					// Perform error handling here!
+					pBuffer->Release();
+
+					g_vWindowSize.x = (float)desktop.right;
+					g_vWindowSize.y = (float)desktop.bottom;
+
+					g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+
+					Resize((float)desktop.right, (float)desktop.bottom);
+
+					g_pSwapChain->SetFullscreenState(TRUE, NULL);
+					g_bFullWindow = true;
+				}
+				else
+				{
+					const HWND hDesktop = GetDesktopWindow();
+					RECT desktop;
+					GetWindowRect(hDesktop, &desktop);
+
+					g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+
+					// Release all outstanding references to the swap chain's buffers.
+					g_pBackBufferRenderTargetView->Release();
+
+					HRESULT hr;
+					// Preserve the existing buffer count and format.
+					// Automatically choose the width and height to match the client rect for HWNDs.
+					hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+					// Perform error handling here!
+
+					// Get buffer and create a render-target-view.
+					ID3D11Texture2D* pBuffer;
+					hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+						(void**)&pBuffer);
+					// Perform error handling here!
+
+					hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
+						&g_pBackBufferRenderTargetView);
+					// Perform error handling here!
+					pBuffer->Release();
+
+					g_vWindowSize.x = (float)desktop.right;
+					g_vWindowSize.y = (float)desktop.bottom;
+
+					g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+
+					Resize((float)desktop.right, (float)desktop.bottom);
+
+					g_pSwapChain->SetFullscreenState(FALSE, NULL);
+					g_bFullWindow = false;
+				}
+			}
+			break;
+		}
+		break;
+	case WM_KEYUP:
+	{
+		switch (wParam)
+		{
+		case VK_CONTROL:
+			g_bCtrl = false;
+			break;
+		}
+		break;
+	}
 	case WM_LBUTTONDOWN:
 	{
 		// Capture mouse input
@@ -380,6 +573,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		ClipCursor(NULL);
 
+		std::chrono::high_resolution_clock::time_point newClick;
+		newClick = std::chrono::high_resolution_clock::now();
+
+		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(newClick - g_tLastClick);
+		if (time_span.count() < 0.3)
+		{
+			if (g_bFullscreen)
+				g_bFullscreen = false;
+			else if(g_bTrackMouse)
+				g_bFullscreen = true;
+		}
+
+		g_tLastClick = newClick;
+
 		g_vMouse.z = 0.0f;
 
 		break;
@@ -387,6 +594,62 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_RBUTTONUP:
 	{
 		g_vMouse.w = 0.0f;
+		break;
+	}
+	case WM_SIZE:
+	{
+		int width = LOWORD(lParam);
+		int height = HIWORD(lParam);
+
+		if (width == 0 || height == 0)
+			break;
+		if (g_pSwapChain)
+		{
+			g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+
+			// Release all outstanding references to the swap chain's buffers.
+			g_pBackBufferRenderTargetView->Release();
+
+			HRESULT hr;
+			// Preserve the existing buffer count and format.
+			// Automatically choose the width and height to match the client rect for HWNDs.
+			hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+			// Perform error handling here!
+
+			// Get buffer and create a render-target-view.
+			ID3D11Texture2D* pBuffer;
+			hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+				(void**)&pBuffer);
+			// Perform error handling here!
+
+			hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
+				&g_pBackBufferRenderTargetView);
+			// Perform error handling here!
+			pBuffer->Release();
+
+			// Resize and relocate ImGui windows
+			float xScale = (float)width / g_vAppSize.right;
+			float yScale = (float)height / g_vAppSize.bottom;
+
+			// Update where ImGui windows should be
+			ImGuiScaleMove(g_vResourceWindow, xScale, yScale);
+			ImGuiScaleMove(g_vMainImageWindow, xScale, yScale);
+			ImGuiScaleMove(g_vControlWindow, xScale, yScale);
+			ImGuiScaleMove(g_vViewToggleWindow, xScale, yScale);
+			ImGuiScaleMove(g_vShaderErrorWindow, xScale, yScale);
+
+			g_bResChanged = true;
+
+			g_vWindowSize.x = (float)width;
+			g_vWindowSize.y = (float)height;
+
+			g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+		}
+
+		g_vAppSize.right = width;
+		g_vAppSize.bottom = height;
+
 		break;
 	}
 	default:
@@ -476,6 +739,7 @@ HRESULT InitDevice()
 	sd.SampleDesc.Count = 1;
 	sd.SampleDesc.Quality = 0;
 	sd.Windowed = TRUE;
+	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 	hr = dxgiFactory->CreateSwapChain(g_pd3dDevice, &sd, &g_pSwapChain);
 
@@ -533,7 +797,10 @@ HRESULT InitDevice()
 
 	// Compile the vertex shader
 	ID3DBlob* pVSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/VertexShader.hlsl", "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
+	std::wstring g_strProjectW(g_strProject.length(), L' '); // Make room for characters
+	 // Copy string to wstring.
+	std::copy(g_strProject.begin(), g_strProject.end(), g_strProjectW.begin());
+	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/VertexShader.hlsl")).c_str()), "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
@@ -572,7 +839,7 @@ HRESULT InitDevice()
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
@@ -585,7 +852,6 @@ HRESULT InitDevice()
 
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
-		return hr;
 	}
 
 	// Create the pixel shader
@@ -646,8 +912,12 @@ HRESULT InitDevice()
 	if (FAILED(hr))
 		return hr;
 
+	bd.ByteWidth = 16;
+	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
+	if (FAILED(hr))
+		return hr;
 	
-	InitTextures();
+	InitResources(true);
 
 	SetDebugObjectName(g_pCBNeverChanges, "ConstantBuffer_NeverChanges");
 	SetDebugObjectName(g_pCBChangesEveryFrame, "ConstantBuffer_ChangesEveryFrame");
@@ -678,7 +948,19 @@ void InitImGui()
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-	io.FontGlobalScale = 1.2f;
+	const HWND hDesktop = GetDesktopWindow();
+	RECT desktop;
+	GetWindowRect(hDesktop, &desktop);
+
+	switch (desktop.right)
+	{
+	case 3840:
+		// 4K
+		g_fDPIscale = 1.1f;
+		break;
+	}
+
+	io.FontGlobalScale = 1.2f * g_fDPIscale;
 
 	ImGui_ImplWin32_Init(g_hWnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pImmediateContext);
@@ -690,10 +972,9 @@ void InitImGui()
 //--------------------------------------------------------------------------------------
 // Load in textures and initialize the samplers
 //--------------------------------------------------------------------------------------
-HRESULT InitTextures()
+HRESULT InitResources(bool bLoadTextures)
 {
 	HRESULT hr = S_OK;
-	Channel channels[4];
 	int size = 0;
 
 	for (int i = 0; i < 4; ++i)
@@ -702,25 +983,28 @@ HRESULT InitTextures()
 		g_Buffers[i] = Buffer();
 	}
 
-	// Populate the texture library
-	g_pTexturelib = new TextureLib();
-	g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
+	if (bLoadTextures)
+	{
+		// Populate the texture library
+		g_pTexturelib = new TextureLib();
+		g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
+	}
 
-	if(!LoadChannels("channels/channels.txt", channels, size))
+	if (!LoadChannels((std::string("../../ShaderToyLibrary/") + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
 		return S_FALSE;
 
 	for (int i = 0; i < size; ++i)
 	{
-		if (channels[i].m_Type == Channels::ChannelType::E_Texture)
+		if (g_Channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
 			g_Resource[i].m_Type = Channels::ChannelType::E_Texture;
 
-			strcpy(g_Resource[i].m_strTexture,channels[i].m_strTexture);
+			strcpy(g_Resource[i].m_strTexture, g_Channels[i].m_strTexture);
 
 			// Get texture from texture lib
-			g_pTexturelib->GetTexture(channels[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
+			g_pTexturelib->GetTexture(g_Channels[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
 		}
-		else if (channels[i].m_Type == Channels::ChannelType::E_Buffer)
+		else if (g_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
 			RECT rc;
 			GetClientRect(g_hWnd, &rc);
@@ -730,19 +1014,108 @@ HRESULT InitTextures()
 			g_Resource[i].m_Type = Channels::ChannelType::E_Buffer;
 
 			// Initialize buffer
-			g_Buffers[static_cast<int>(channels[i].m_BufferId)].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_Buffers, width, height, channels[i].m_BufferId);
+			g_Buffers[static_cast<int>(g_Channels[i].m_BufferId)].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_Buffers, g_strProject.c_str(), width, height, g_Channels[i].m_BufferId);
 
 			g_Resource[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
-			g_Resource[i].m_iBufferIndex = static_cast<int>(channels[i].m_BufferId);
+			g_Resource[i].m_iBufferIndex = static_cast<int>(g_Channels[i].m_BufferId);
 
-			g_Buffers[static_cast<int>(channels[i].m_BufferId)].SetShaderResource(g_pImmediateContext, i);
+			g_Buffers[static_cast<int>(g_Channels[i].m_BufferId)].SetShaderResource(g_pImmediateContext, i);
+		}
+		else
+		{
+			g_Resource[i].m_Type = Channels::ChannelType::E_None;
 		}
 
 		// Create Sampler
-		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, channels[i], -1, i);
+		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, g_Channels[i], -1, i);
 	}
 
 	return S_OK;
+}
+
+
+//--------------------------------------------------------------------------------------
+// Resize the Texture
+//--------------------------------------------------------------------------------------
+void Resize(const float width, const float height)
+{
+	// Updating the texture size per buffer
+	for (int i = 0; i < 4; ++i)
+	{
+		if (g_Buffers[i].m_bIsActive)
+		{
+			g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+
+			g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width - g_vPadding.x, height - g_vPadding.y, 0.0f, 0.0f);
+		}
+	}
+
+	// Releasing objects before creating new ones
+	g_pRenderTargetTexture->Release();
+	g_pRenderTargetView->Release();
+	g_pShaderResourceView->Release();
+
+	g_pDepthStencilView->Release();
+	g_pDepthStencilState->Release();
+	g_pDepthStencilBuffer->Release();
+
+	Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+	CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+
+	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+	g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, NULL);
+
+	// Resizing the viewport
+	D3D11_VIEWPORT vp;
+	vp.Width = (width - g_vPadding.x);
+	vp.Height = (height - g_vPadding.y);
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	vp.TopLeftX = 0;
+	vp.TopLeftY = 0;
+
+	g_pImmediateContext->RSSetViewports(1, &vp);
+
+	g_vCurrentWindowSize = ImVec2(width, height);
+}
+
+
+//--------------------------------------------------------------------------------------
+// Auto Reload
+//--------------------------------------------------------------------------------------
+void AutoReload()
+{
+	const char* filename[5] = { 
+		"/shaders/PixelShader.hlsl",
+		"/shaders/PixelShaderBufferA.hlsl",
+		"/shaders/PixelShaderBufferB.hlsl",
+		"/shaders/PixelShaderBufferC.hlsl",
+		"/shaders/PixelShaderBufferD.hlsl",
+	};
+
+	struct _stat result;
+
+	std::string path = std::string("../../ShaderToyLibrary/") + g_strProject;
+
+	for (int i = 0; i < 5; ++i)
+	{
+		if (_stat((path + std::string(filename[i])).c_str(), &result) == 0)
+		{
+			// Time when file was last modified
+			if  (g_tTimeCreated == 0)
+				g_tTimeCreated = result.st_mtime;
+
+			if (result.st_mtime > g_tTimeCreated)
+			{
+				// file has been modified
+				g_tTimeCreated = result.st_mtime;
+				ReloadShaders();
+
+				// if one needs a reload, then we reload them all
+				return;
+			}
+		}
+	}
 }
 
 
@@ -751,6 +1124,9 @@ HRESULT InitTextures()
 //--------------------------------------------------------------------------------------
 void Render()
 {
+	if(g_bAutoReload)
+		AutoReload();
+
 	if (g_pTexturelib->m_bReload)
 	{
 		for (int i = 0; i < 4; ++i)
@@ -789,7 +1165,20 @@ void Render()
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
 
-	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+	if (!g_bFullscreen)
+		g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+	else
+	{
+		RECT window;
+		GetWindowRect(g_hWnd, &window);
+
+		Resize((float)(window.right - window.left), (float)(window.bottom - window.top));
+
+		if (g_iPadding != 0)
+			g_pImmediateContext->PSSetShader(g_Buffers[g_iPadding - 1].m_pPixelShader, nullptr, 0);
+
+		g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, nullptr);
+	}
 
 	// Get time
 	time_t now = time(0);
@@ -819,7 +1208,15 @@ void Render()
 	}
 
 	// Clear the back buffer 
-	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, DirectX::Colors::MidnightBlue);
+	if (!g_bFullscreen)
+		g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, DirectX::Colors::MidnightBlue);
+	else
+	{	
+		if(g_iPadding == 0)
+			g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, DirectX::Colors::MidnightBlue);
+		else
+			g_pImmediateContext->ClearRenderTargetView(g_Buffers[g_iPadding - 1].m_pRenderTargetView, DirectX::Colors::Cyan);
+	}
 
 	//
 	// Update variables that change once per frame
@@ -863,7 +1260,7 @@ void Render()
 	g_pImmediateContext->PSSetConstantBuffers(1, 1, &g_pCBChangesEveryFrame);
 	g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
 
-	//PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
+	PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
 
 	// Draw th triangles that make up the window
 	g_pImmediateContext->DrawIndexed(ARRAYSIZE(g_Indicies), 0, 0);
@@ -887,10 +1284,14 @@ void ImGuiRender()
 //--------------------------------------------------------------------------------------
 void CleanupDevice()
 {
+	// Save Imgui state
+	ImGui::SaveIniSettingsToDisk("imgui.ini");
+	WriteIni(g_strProject.c_str(), g_strDefaultEditor.c_str(), g_vClearColor, g_vAppSize, static_cast<int>(g_eDefaultEditor), g_bAutoReload);
 	ULONG refs = 0;
+	// revert fullscreen before closing
+	g_pSwapChain->SetFullscreenState(FALSE, NULL);
 
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
-
 
 	for (int i = 0; i < 4; ++i)
 	{
@@ -913,6 +1314,7 @@ void CleanupDevice()
 
 	SAFE_RELEASE(g_pCBNeverChanges);
 	SAFE_RELEASE(g_pCBChangesEveryFrame);
+	SAFE_RELEASE(g_pCBCustomizable);
 	SAFE_RELEASE(g_pVertexBuffer);
 	SAFE_RELEASE(g_pIndexBuffer);
 	SAFE_RELEASE(g_d3dInputLayout);
@@ -936,6 +1338,11 @@ void CleanupDevice()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
+	// In case we aren't cleaning up correctly
+	/*ID3D11Debug *d3dDebug = nullptr;
+	g_pd3dDevice->QueryInterface(__uuidof(ID3D11Debug), (void**)&d3dDebug);
+	d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL);*/
+
 	SAFE_RELEASE(g_pd3dDevice);
 }
 
@@ -954,56 +1361,61 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 	// Controls Window
 	int buttonPress = 0;
-	ControlWindow(g_bPause, g_fGameT, g_fPlaySpeed, g_vClearColor, buttonPress, g_eDefaultEditor);
+	ControlWindow(
+		g_pRenderTargetTexture,
+		g_Resource,
+		g_vClearColor,
+		g_Buffers,
+		g_pTexturelib,
+		g_eDefaultEditor,
+		g_eAspectRatio,
+		g_eResolution,
+		g_vMouse,
+		g_strProject,
+		g_bPause, g_bAutoReload,
+		g_fGameT, g_fPlaySpeed, 
+		g_fDeltaT, g_fDPIscale,
+		g_iFrame, buttonPress,
+		g_bResChanged,
+		g_bNewProjLoad,
+		g_bDefaultEditorSelected,
+		g_vControlWindow,
+		g_vMainImageWindow
+	);
 
 	if (buttonPress & 0x0001)
 		ReloadShaders();
 
-	// Constant buffer Data
-	ConstantBufferInfoWindow(g_pRenderTargetTexture, g_Resource, g_Buffers, g_iFrame, g_bPause, g_fGameT, g_fDeltaT, g_vMouse);
-
 	// Box for ShaderToy image to be displayed in
-	if (g_vCurrentWindowSize.x != g_vWindowSize.x && g_vCurrentWindowSize.y != g_vWindowSize.y)
+	if ((((int)g_vCurrentWindowSize.x != (int)g_vWindowSize.x && (int)g_vCurrentWindowSize.y != (int)g_vWindowSize.y) || g_bResChanged) && !g_bFullscreen)
 	{
-		// Updating the texture size per buffer
-		for (int i = 0; i < 4; ++i)
-		{
-			if (g_Buffers[i].m_bIsActive)
-			{
-				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
-				
-				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(g_vWindowSize.x, g_vWindowSize.y, 0.0f, 0.0f);
-			}
-		}
-
-		// Releasing objects before creating new ones
-		g_pRenderTargetTexture->Release();
-		g_pRenderTargetView->Release();
-		g_pShaderResourceView->Release();
-
-		g_pDepthStencilView->Release();
-		g_pDepthStencilState->Release();
-		g_pDepthStencilBuffer->Release();
-
-		Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
-		CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)g_vWindowSize.x, (UINT)g_vWindowSize.y);
-
-		g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
-		g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, NULL);
-
-		// Resizing the viewport
-		D3D11_VIEWPORT vp;
-		vp.Width = (FLOAT)g_vWindowSize.x;
-		vp.Height = (FLOAT)g_vWindowSize.y;
-		vp.MinDepth = 0.0f;
-		vp.MaxDepth = 1.0f;
-		vp.TopLeftX = 0;
-		vp.TopLeftY = 0;
-
-		g_pImmediateContext->RSSetViewports(1, &vp);
-
-		g_vCurrentWindowSize = g_vWindowSize;
+		if(g_bResChanged)
+			Resize(g_vMainImageWindow.z, g_vMainImageWindow.w);
+		else
+			Resize(g_vWindowSize.x, g_vWindowSize.y);
 	}
+
+	int iHovered = -1;
+
+	// Box for the resources
+	ResourceWindow(
+		g_pd3dDevice,
+		g_pImmediateContext,
+		g_pVertexShader,
+		g_Resource, 
+		g_Buffers, 
+		g_Channels, 
+		g_pTexturelib, 
+		g_strProject.c_str(), 
+		g_fDPIscale, 
+		g_iPadding, 
+		g_iPressIdentifier, 
+		iHovered, 
+		g_bResChanged, 
+		g_bNewProjLoad,
+		g_vWindowSize,
+		g_vResourceWindow
+	);
 
 	MainImageWindow(
 		g_pShaderResourceView,
@@ -1011,18 +1423,38 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_Buffers,
 		g_vWindowSize,
 		g_vCurrentWindowSize,
-		g_windowFlags, g_iPadding, g_bTrackMouse);
-
-	int iHovered = -1;
-
-	// Box for the resources
-	ResourceWindow(g_pImmediateContext, g_Resource, g_Buffers, g_pTexturelib, g_iPadding, g_iPressIdentifier, iHovered);
-
-	// Toggle view
-	ViewToggleWindow(g_iPadding, g_Buffers, iHovered);
+		g_vPadding,
+		g_windowFlags,
+		g_strProject.c_str(),
+		g_strDefaultEditor,
+		g_eDefaultEditor,
+		g_iPadding, iHovered,
+		g_fDPIscale,
+		g_bTrackMouse, g_bFullscreen,
+		g_bResChanged, g_vMainImageWindow);
 
 	// Shader Compiler Errors
-	ShaderErrorWindow(g_Buffers, g_eDefaultEditor);
+	ShaderErrorWindow(
+		g_Buffers, 
+		g_vShaderErrorList, 
+		g_strProject, 
+		g_strDefaultEditor, 
+		g_eDefaultEditor, 
+		g_bResChanged, 
+		g_vShaderErrorWindow
+	);
+
+	// Selection of default editor
+	if (!g_bDefaultEditorSelected)
+	{	
+		ImVec2 size = ImVec2((float)(g_vAppSize.right + 5), (float)(g_vAppSize.bottom + 5));
+		ImGui::SetNextWindowFocus();
+		Barrier(size);
+		ImGui::SetNextWindowFocus();
+		DefaultEditorSelector(ImVec2(size.x / 2, size.y / 2), g_eDefaultEditor, g_strDefaultEditor, g_bDefaultEditorSelected);
+	}
+
+	g_bResChanged = false;
 }
 
 //--------------------------------------------------------------------------------------
@@ -1035,17 +1467,24 @@ void ReloadShaders()
 	for (int i = 0; i < 4; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
-			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, i);
+			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, g_strProject.c_str(), i);
 	}
+
+	// Make room for characters
+	std::wstring wStrProj(g_strProject.length(), L' ');
+	// Copy string to wstring.
+	std::copy(g_strProject.begin(), g_strProject.end(), wStrProj.begin());
+
+	std::wstring path = std::wstring(L"../../ShaderToyLibrary/") + wStrProj;
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(L"shaders/PixelShader.hlsl", "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	g_vShaderErrorList.clear();
+	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
-		return;
 	}
 
 	g_pPixelShader->Release();
@@ -1053,7 +1492,6 @@ void ReloadShaders()
 
 	// Create the pixel shader
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
-	pPSBlob->Release();
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
@@ -1061,7 +1499,104 @@ void ReloadShaders()
 		return;
 	}
 
+	ID3D11ShaderReflection* lPixelShaderReflection = nullptr;
+	if (FAILED(D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&lPixelShaderReflection)))
+	{
+		return;
+	}
+	pPSBlob->Release();
+
+	D3D11_SHADER_DESC desc;
+	lPixelShaderReflection->GetDesc(&desc);
+
+	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
+
+	UINT sizeofBuffer = 0;
+
+	if(desc.ConstantBuffers >= 3)
+	{
+		int iConstantBuffer = 2;
+		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = lPixelShaderReflection->GetConstantBufferByIndex(iConstantBuffer);
+
+		// bufferDesc holds the name of the buffer and how many variables it holds
+		D3D11_SHADER_BUFFER_DESC bufferDesc;
+		pConstantBuffer->GetDesc(&bufferDesc);
+
+		for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
+		{
+			ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
+
+			D3D11_SHADER_VARIABLE_DESC varDesc;
+			pVar->GetDesc(&varDesc);
+
+			sizeofBuffer += varDesc.Size;
+			g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+		}
+	}
+
+	D3D11_BUFFER_DESC bd = {};
+
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = (sizeofBuffer / 16 + 1) * 16;
+	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	bd.CPUAccessFlags = 0;
+
+	SAFE_RELEASE(g_pCBCustomizable);
+	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
+
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
+}
+
+//--------------------------------------------------------------------------------------
+// Reload the Pixel Shaders
+//--------------------------------------------------------------------------------------
+HRESULT LoadProject()
+{
+	HRESULT hr = S_OK;
+
+	std::wstring g_strProjectW(g_strProject.length(), L' '); // Make room for characters
+	 // Copy string to wstring.
+	std::copy(g_strProject.begin(), g_strProject.end(), g_strProjectW.begin());
+
+	// Load new pixel shader
+	// Compile the pixel shader
+	ID3DBlob* pPSBlob = nullptr;
+	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	if (FAILED(hr))
+	{
+		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
+		{
+			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
+
+			MessageBox(nullptr,
+				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
+		}
+
+		MessageBox(nullptr,
+			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+	}
+
+	// Create the pixel shader
+	g_pPixelShader->Release();
+	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
+	pPSBlob->Release();
+	if (FAILED(hr))
+		return hr;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		if (g_Buffers[i].m_bIsActive)
+		{
+			g_Buffers[i].Release(i);
+		}
+
+		if (g_Resource[i].m_pSampler)
+			g_Resource[i].m_pSampler->Release();
+	}
+
+	InitResources(false);
+	Resize(g_vWindowSize.x, g_vWindowSize.y);
+	return hr;
 }

@@ -1,5 +1,5 @@
 ########## Texture Controls #############
-s 3
+s 0
 
 iC textures/weave.dds
 t texture

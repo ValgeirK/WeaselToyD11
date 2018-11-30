@@ -393,6 +393,176 @@ bool ImGuiFileDialog::FileDialog(const char* vName, std::string& vSelected, int 
 	return res;
 }
 
+bool ImGuiFileDialog::FileDialog(const char* vName, const char* vFilters, std::string vPath, std::string vDefaultFileName)
+{
+	bool res = false;
+
+	IsOk = false;
+
+	ImGui::Begin(vName);
+
+	if (vPath.size() == 0) vPath = ".";
+
+	if (m_FileList.size() == 0)
+	{
+		if (vDefaultFileName.size() > 0)
+		{
+			ResetBuffer(FileNameBuffer);
+			AppendToBuffer(FileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, vDefaultFileName);
+		}
+
+		ScanDir(vPath);
+	}
+
+	// show current path
+	bool pathClick = false;
+	for (std::vector<std::string>::iterator itPathDecomp = m_CurrentPath_Decomposition.begin();
+		itPathDecomp != m_CurrentPath_Decomposition.end(); ++itPathDecomp)
+	{
+		if (itPathDecomp != m_CurrentPath_Decomposition.begin())
+			ImGui::SameLine();
+
+		if (ImGui::Button((*itPathDecomp).c_str()))
+		{
+			ComposeNewPath(itPathDecomp);
+			pathClick = true;
+			break;
+		}
+	}
+
+	ImVec2 size = ImGui::GetContentRegionMax() - ImVec2(0.0f, 120.0f);
+
+	ImGui::BeginChild("##FileDialog_FileList", size);
+
+	for (std::vector<FileInfoStruct>::iterator it = m_FileList.begin(); it != m_FileList.end(); ++it)
+	{
+		FileInfoStruct infos = *it;
+
+		bool show = true;
+
+		std::string str;
+		if (infos.type == 'd') str = "[Dir] " + infos.fileName;
+		if (infos.type == 'l') str = "[Link] " + infos.fileName;
+		if (infos.type == 'f') str = "[File] " + infos.fileName;
+		if (infos.type == 'f' && m_CurrentFilterExt.size() > 0 && infos.ext != m_CurrentFilterExt)
+		{
+			show = false;
+		}
+		if (show == true)
+		{
+			if (ImGui::Selectable(str.c_str(), (infos.fileName == m_SelectedFileName)))
+			{
+				if (infos.type == 'd' && strcmp(vFilters, "d") != 0)
+				{
+					if (infos.fileName == "..")
+					{
+						if (m_CurrentPath_Decomposition.size() > 1)
+						{
+							std::vector<std::string>::iterator itPathDecomp = m_CurrentPath_Decomposition.end() - 2;
+							ComposeNewPath(itPathDecomp);
+						}
+					}
+					else
+					{
+						m_CurrentPath += "\\" + infos.fileName;
+					}
+					pathClick = true;
+				}
+				else
+				{
+					m_SelectedFileName = infos.fileName;
+					ResetBuffer(FileNameBuffer);
+					AppendToBuffer(FileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, m_SelectedFileName);
+				}
+				break;
+			}
+
+			if (infos.type == 'd' && ImGui::IsItemHovered())
+			{
+				if (ImGui::IsMouseDoubleClicked(0))
+				{
+					IsOk = true;
+					res = true;
+				}
+			}
+		}
+	}
+
+	// changement de repertoire
+	if (pathClick == true)
+	{
+		ScanDir(m_CurrentPath);
+		m_CurrentPath_Decomposition = splitStringVector(m_CurrentPath, '\\');
+		if (m_CurrentPath_Decomposition.size() == 2)
+			if (m_CurrentPath_Decomposition[1] == "")
+				m_CurrentPath_Decomposition.erase(m_CurrentPath_Decomposition.end() - 1);
+	}
+
+	ImGui::EndChild();
+
+	ImGui::Text("File Name : ");
+
+	ImGui::SameLine();
+
+	float width = ImGui::GetContentRegionAvailWidth();
+	if (vFilters != 0) width -= 120.0f;
+	ImGui::PushItemWidth(width);
+	ImGui::InputText("##FileName", FileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER);
+	ImGui::PopItemWidth();
+
+	if (vFilters != 0)
+	{
+		ImGui::SameLine();
+
+		ImGui::PushItemWidth(100.0f);
+		bool comboClick = ImGui::Combo("##Filters", &FilterIndex, vFilters) || m_CurrentFilterExt.size() == 0;
+		ImGui::PopItemWidth();
+		if (comboClick == true)
+		{
+			int itemIdx = 0;
+			const char* p = vFilters;
+			while (*p)
+			{
+				if (FilterIndex == itemIdx)
+				{
+					m_CurrentFilterExt = std::string(p);
+					break;
+				}
+				p += strlen(p) + 1;
+				itemIdx++;
+			}
+		}
+	}
+
+	if (ImGui::Button("Cancel"))
+	{
+		IsOk = false;
+		res = true;
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Ok"))
+	{
+		IsOk = true;
+		res = true;
+	}
+
+	ImGui::End();
+
+	if (res == true)
+	{
+		m_FileList.clear();
+	}
+
+	return res;
+}
+
+std::string ImGuiFileDialog::GetSelectedFile()
+{
+	return m_SelectedFileName;
+}
+
 std::string ImGuiFileDialog::GetFilepathName()
 {
 	return GetCurrentPath() + "\\" + GetCurrentFileName();

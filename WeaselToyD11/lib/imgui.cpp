@@ -3831,8 +3831,9 @@ bool ImGui::IsMouseReleased(int button)
 bool ImGui::IsMouseDoubleClicked(int button)
 {
     ImGuiContext& g = *GImGui;
-    IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
-    return g.IO.MouseDoubleClicked[button];
+	IM_ASSERT(button >= 0 && button < IM_ARRAYSIZE(g.IO.MouseDown));
+	
+	return g.IO.MouseDoubleClicked[button];
 }
 
 bool ImGui::IsMouseDragging(int button, float lock_threshold)
@@ -4757,7 +4758,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
                 window->Pos = ImMin(window->Pos, g.IO.DisplaySize - padding);
             }
         }
-        window->Pos = ImFloor(window->Pos);
+        //window->Pos = ImFloor(window->Pos);
 
         // Lock window rounding for the frame (so that altering them doesn't cause inconsistencies)
         window->WindowRounding = (flags & ImGuiWindowFlags_ChildWindow) ? style.ChildRounding : ((flags & ImGuiWindowFlags_Popup) && !(flags & ImGuiWindowFlags_Modal)) ? style.PopupRounding : style.WindowRounding;

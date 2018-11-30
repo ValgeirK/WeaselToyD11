@@ -19,6 +19,7 @@ HRESULT Buffer::InitBuffer(
 	ID3D11VertexShader*  pVertShader,
 	TextureLib*			 pTextureLib,
 	Buffer*				 pBuffer,
+	const char*			 strProj,
 	const int			 width, 
 	const int			 height, 
 	Channels::BufferId   index
@@ -26,31 +27,35 @@ HRESULT Buffer::InitBuffer(
 {
 	HRESULT hr = S_OK;
 
-	// Reading in Channel file for this channel
-	const char* channelPath = "";
-	const WCHAR* pixelShaderPath = (wchar_t *)malloc(sizeof(wchar_t) * 100);
 	int padding = 0;
+
+	// Reading in Channel file for this channel
+	std::string projChannelPath = "../../ShaderToyLibrary/" + std::string(strProj);
+	// Make room for characters
+	std::wstring projPixelPathW(projChannelPath.length(), L' ');
+	 // Copy string to wstring.
+	std::copy(projChannelPath.begin(), projChannelPath.end(), projPixelPathW.begin());
 
 	switch (index)
 	{
 	case 0:
-		channelPath = "channels/channelsA.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferA.hlsl";
+		projChannelPath += std::string("/channels/channelsA.txt");
+		projPixelPathW += std::wstring(L"/shaders/PixelShaderBufferA.hlsl");
 		padding = 1;
 		break;
 	case 1:
-		channelPath = "channels/channelsB.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferB.hlsl";
+		projChannelPath += std::string("/channels/channelsB.txt");
+		projPixelPathW += std::wstring(L"/shaders/PixelShaderBufferB.hlsl");
 		padding = 2;
 		break;
 	case 2:
-		channelPath = "channels/channelsC.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferC.hlsl";
+		projChannelPath += std::string("/channels/channelsC.txt");
+		projPixelPathW += std::wstring(L"/shaders/PixelShaderBufferC.hlsl");
 		padding = 3;
 		break;
 	case 3:
-		channelPath = "channels/channelsD.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferD.hlsl";
+		projChannelPath += std::string("/channels/channelsD.txt");
+		projPixelPathW += std::wstring(L"/shaders/PixelShaderBufferD.hlsl");
 		padding = 4;
 		break;
 	}
@@ -59,12 +64,12 @@ HRESULT Buffer::InitBuffer(
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBufferBlob = nullptr;
-	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
+	hr = CompileShaderFromFile(projPixelPathW.c_str(), "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
 		{
-			_bstr_t b(pixelShaderPath);
+			_bstr_t b(projPixelPathW.c_str());
 			const char* c = b;
 			std::string msg = "Error Pixel Shader \"" + std::string(c) + "\" not found!";
 
@@ -74,7 +79,6 @@ HRESULT Buffer::InitBuffer(
 
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
-		return hr;
 	}
 
 	hr = Create2DTexture(pd3dDevice, &m_pRenderTargetTexture, &m_pRenderTargetView, &m_pShaderResourceView, width, height);
@@ -87,7 +91,7 @@ HRESULT Buffer::InitBuffer(
 
 	SetDebugObjectName(m_pPixelShader, "BufferPixelShader");
 
-	if (!LoadChannels(channelPath, m_Channels, m_iSize))
+	if (!LoadChannels(projChannelPath.c_str(), m_Channels, m_iSize))
 		return S_FALSE;
 
 	// Load texture
@@ -110,7 +114,7 @@ HRESULT Buffer::InitBuffer(
 			m_Res[i].m_Type = Channels::ChannelType::E_Buffer;
 
 			// Initialize buffer
-			pBuffer[static_cast<int>(m_Channels[i].m_BufferId)].InitBuffer(pd3dDevice, pImmediateContext, pVertShader, pTextureLib, pBuffer, width, height, m_Channels[i].m_BufferId);
+			pBuffer[static_cast<int>(m_Channels[i].m_BufferId)].InitBuffer(pd3dDevice, pImmediateContext, pVertShader, pTextureLib, pBuffer, strProj, width, height, m_Channels[i].m_BufferId);
 
 			m_Res[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
 			m_Res[i].m_iBufferIndex = static_cast<int>(m_Channels[i].m_BufferId);
@@ -160,30 +164,34 @@ void Buffer::ResizeTexture(ID3D11Device* device, ID3D11DeviceContext* context, c
 	}
 }
 
-HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVertShader, const int index)
+HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVertShader, const char* strProj, const int index)
 {
 	HRESULT hr = S_OK;
 
-	const char* channelPath = "";
-	const WCHAR* pixelShaderPath = (wchar_t *)malloc(sizeof(wchar_t) * 100);
+	// Reading in Channel file for this channel
+	std::string channelPath = "../../ShaderToyLibrary/" + std::string(strProj);
+	// Make room for characters
+	std::wstring pixelShaderPath(channelPath.length(), L' ');
+	// Copy string to wstring.
+	std::copy(channelPath.begin(), channelPath.end(), pixelShaderPath.begin());
 
 	switch (index)
 	{
 	case 0:
-		channelPath = "channels/channelsA.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferA.hlsl";
+		channelPath += std::string("/channels/channelsA.txt");
+		pixelShaderPath += std::wstring(L"/shaders/PixelShaderBufferA.hlsl");
 		break;
 	case 1:
-		channelPath = "channels/channelsB.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferB.hlsl";
+		channelPath += std::string("/channels/channelsB.txt");
+		pixelShaderPath += std::wstring(L"/shaders/PixelShaderBufferB.hlsl");
 		break;
 	case 2:
-		channelPath = "channels/channelsC.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferC.hlsl";
+		channelPath += std::string("/channels/channelsC.txt");
+		pixelShaderPath += std::wstring(L"/shaders/PixelShaderBufferC.hlsl");
 		break;
 	case 3:
-		channelPath = "channels/channelsD.txt";
-		pixelShaderPath = L"shaders/PixelShaderBufferD.hlsl";
+		channelPath += std::string("/channels/channelsD.txt");
+		pixelShaderPath += std::wstring(L"/shaders/PixelShaderBufferD.hlsl");
 		break;
 	}
 
@@ -192,12 +200,12 @@ HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVer
 	// Compile the pixel shader
 	ID3DBlob* pPSBufferBlob = nullptr;
 	m_ShaderError.clear();
-	hr = CompileShaderFromFile(pixelShaderPath, "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
+	hr = CompileShaderFromFile(pixelShaderPath.c_str(), "main", "ps_4_0", &pPSBufferBlob, m_ShaderError);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
 		{
-			_bstr_t b(pixelShaderPath);
+			_bstr_t b(pixelShaderPath.c_str());
 			const char* c = b;
 			std::string msg = "Error Pixel Shader \"" + std::string(c) + "\" not found!";
 
@@ -207,8 +215,6 @@ HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVer
 
 		MessageBox(nullptr,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
-
-		return hr;
 	}
 
 	m_pPixelShader->Release();

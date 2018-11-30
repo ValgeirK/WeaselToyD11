@@ -46,6 +46,9 @@
     <ClCompile Include="common\ImGuiWindows.cpp">
       <Filter>common</Filter>
     </ClCompile>
+    <ClCompile Include="common\RegisterHelper.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\imgui_impl_dx11.h">
@@ -108,6 +111,9 @@
     </ClInclude>
     <ClInclude Include="common\FileIO.h" />
     <ClInclude Include="common\ImGuiWindows.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\RegisterHelper.h">
       <Filter>common</Filter>
     </ClInclude>
   </ItemGroup>

@@ -6,8 +6,9 @@ namespace Channels
 {
 	enum ChannelType
 	{
-		E_Texture = 0,
-		E_Buffer = 1
+		E_None = 0,
+		E_Texture = 1,
+		E_Buffer = 2,
 	};
 
 	enum FilterType

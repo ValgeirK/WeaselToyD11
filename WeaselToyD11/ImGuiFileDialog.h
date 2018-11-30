@@ -54,11 +54,13 @@ public:
 	~ImGuiFileDialog();
 
 	bool FileDialog(const char* vName, std::string& vSelected, int iPadding, const char* vFilters = 0, std::string vPath = ".", std::string vDefaultFileName = "");
+	bool FileDialog(const char* vName, const char* vFilters = 0, std::string vPath = ".", std::string vDefaultFileName = "");
 	void Clear();
 	std::string GetFilepathName();
 	std::string GetCurrentPath();
 	std::string GetCurrentFileName();
 	std::string GetCurrentFilter();
+	std::string GetSelectedFile();
 
 private:
 	void ScanDir(std::string vPath);

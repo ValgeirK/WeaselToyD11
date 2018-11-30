@@ -17,9 +17,9 @@ class Buffer
 public:
 	Buffer() : m_bIsActive(false) {};
 
-	HRESULT							InitBuffer(ID3D11Device*, ID3D11DeviceContext*, ID3D11VertexShader*, TextureLib*, Buffer*, const int, const int, Channels::BufferId);
+	HRESULT							InitBuffer(ID3D11Device*, ID3D11DeviceContext*, ID3D11VertexShader*, TextureLib*, Buffer*, const char*, const int, const int, Channels::BufferId);
 	void							Render(ID3D11DeviceContext*, ID3D11DepthStencilView*, ID3D11Buffer*, const UINT, const UINT, const UINT, const int);
-	HRESULT							ReloadShader(ID3D11Device*, ID3D11VertexShader*, const int);
+	HRESULT							ReloadShader(ID3D11Device*, ID3D11VertexShader*, const char*, const int);
 	void							SetShaderResource(ID3D11DeviceContext*, const int);
 	void							ClearShaderResource(ID3D11DeviceContext*, ID3D11DepthStencilView*);
 	void							ResizeTexture(ID3D11Device*, ID3D11DeviceContext*, const UINT, const UINT);
@@ -41,7 +41,6 @@ public:
 	int								m_iSize = 0;
 	std::vector<std::string>		m_ShaderError;
 
-private:
 	// Shader
 	ID3D11VertexShader*				m_pVertexShader = nullptr;
 	ID3D11PixelShader*				m_pPixelShader = nullptr;
