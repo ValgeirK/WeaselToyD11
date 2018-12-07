@@ -29,11 +29,54 @@ struct CBChangesEveryFrame
 
 struct CustomizableBuffer
 {
-	UINT offset;
+	CustomizableBuffer()
+	{
+		data = nullptr;
+
+		min = -1;
+		max = -1;
+		step = -1;
+	}
+
+	CustomizableBuffer(const CustomizableBuffer& cb)
+	{
+		strcpy(strCommand, cb.strCommand);
+		strcpy(strVariable, cb.strVariable);
+
+		offset = cb.offset;
+		type = cb.type;
+		size = cb.size;
+		min = cb.min;
+		max = cb.max;
+		step = cb.step;
+
+		if (type == 2) // INT
+		{
+			data = new int[size / 4];
+
+			for (int i = 0; i < size / 4; ++i)
+				((int*)data)[i] = ((int*)cb.data)[i];
+		}
+		else if (type == 3) // FLOAT
+		{
+			data = new float[size / 4];
+
+			for (int i = 0; i < size / 4; ++i)
+				((float*)data)[i] = ((float*)cb.data)[i];
+		}
+	}
+
+	void* data;
+
+	char strCommand[MAX_PATH];
 	char strVariable[MAX_PATH];
-	char strType[MAX_PATH];
-	char strData[MAX_PATH];
+
+	UINT offset;
+	int type;
+	int size;
 	float min;
 	float max;
 	float step;
+
+	bool isDataSet = false;
 };

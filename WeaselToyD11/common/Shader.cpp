@@ -62,20 +62,26 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 		return false;
 	}
 
+	vCustomizableBuffer.clear();
+
 	// Initialize variables
 	char line[MAX_PATH] = "";
 	char dummy[MAX_PATH] = "";
+	char dummy2[MAX_PATH] = "";
+	char dummy3[MAX_PATH] = "";
 	char bufferName[MAX_PATH] = "";
 
 	do
 	{
 		// Finding the line where the constant buffer is set
-		inputFile.getline(line, MAX_PATH);
 		sscanf(line, "%s %s\n", &dummy, &bufferName);
-	} while (strcmp(bufferName, "cbCustomizable") != 0);
+	} while (inputFile.getline(line, MAX_PATH) && strcmp(bufferName, "cbCustomizable") != 0);
 
 	// Skipping the line with the curly brackets
 	inputFile.getline(line, MAX_PATH);
+
+	if (strcmp(bufferName, "cbCustomizable") != 0)
+		return S_OK;
 
 	do
 	{
@@ -83,6 +89,7 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 		float min = -1.0f;
 		float max = -1.0f;
 		float step = -1.0f;
+		char strVarName[MAX_PATH] = "";
 		char strMin[MAX_PATH] = "";
 		char strMax[MAX_PATH] = "";
 		char strStep[MAX_PATH] = "";
@@ -90,25 +97,42 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 		CustomizableBuffer cb;
 
 		inputFile.getline(line, MAX_PATH);
-		sscanf(line, "%s %s %s %f %s %f %s %f\n", &dummy, &strCommand, &strMax, &max, &strMin, &min, &strStep, &step);
+		int check = sscanf(line, "%s %s", &dummy, &strCommand);
 
-		if (strcmp(strCommand, "setRange") == 0)
+		if (strcmp(strCommand, "slider") == 0)
 		{
+			sscanf(line, "%s %s %s %s %f %s %f \n", &dummy, &strCommand, &strVarName, &strMin, &min, &strMax, &max);
 			cb.min = min;
 			cb.max = max;
 			cb.step = step;
-			
-			char strType[MAX_PATH] = "";
-			char strVarName[MAX_PATH] = "";
-			char strValue[MAX_PATH] = "";
 
-			inputFile.getline(line, MAX_PATH);
-			sscanf(line, "%s %s %s %s\n", &strType, &strVarName, &dummy, &strValue);
-
+			strcpy(cb.strCommand, strCommand);
 			strcpy(cb.strVariable, strVarName);
-			strcpy(cb.strType, strType);
-			strValue[strlen(strValue) - 1] = '\0';
-			strcpy(cb.strData, strValue);
+
+			vCustomizableBuffer.push_back(cb);
+		}
+		else if (strcmp(strCommand, "input") == 0)
+		{
+			sscanf(line, "%s %s %s %s %f \n", &dummy, &strCommand, &strVarName, &strStep, &step);
+			cb.min = min;
+			cb.max = max;
+			cb.step = step;
+
+			strcpy(cb.strCommand, strCommand);
+			strcpy(cb.strVariable, strVarName);
+
+			vCustomizableBuffer.push_back(cb);
+		}
+		else if (strcmp(strCommand, "colorEdit") == 0
+			|| strcmp(strCommand, "colourEdit") == 0)
+		{
+			sscanf(line, "%s %s %s \n", &dummy, &strCommand, &strVarName);
+			cb.min = min;
+			cb.max = max;
+			cb.step = step;
+
+			strcpy(cb.strCommand, strCommand);
+			strcpy(cb.strVariable, strVarName);
 
 			vCustomizableBuffer.push_back(cb);
 		}

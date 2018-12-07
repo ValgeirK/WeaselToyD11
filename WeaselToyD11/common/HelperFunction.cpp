@@ -40,6 +40,31 @@ void SplitString(const std::string& inStr, std::vector<std::string>& container, 
 	}
 }
 
+void KeepImGuiWindowsInsideApp(RECT rect, ImVec4& vWindow, bool& bResChanged)
+{
+	if (vWindow.x + vWindow.z > rect.right - rect.left)
+	{
+		bResChanged = true;
+		vWindow.x = (rect.right - rect.left) - vWindow.z;
+	}
+	if (vWindow.x < 0.0f)
+	{
+		bResChanged = true;
+		vWindow.x = 0.0f;
+	}
+
+	if (vWindow.y + vWindow.w > rect.bottom - rect.top)
+	{
+		bResChanged = true;
+		vWindow.y = (rect.bottom - rect.top) - vWindow.w;
+	}
+	if (vWindow.y < 0.0f)
+	{
+		bResChanged = true;
+		vWindow.y = 0.0f;
+	}
+}
+
 void ImGuiScaleMove(ImVec4& vWindow, float xScale, float yScale)
 {
 	vWindow.x *= xScale;

@@ -9,7 +9,6 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include <directxcolors.h>
-#include <pix3.h>
 #include <string.h>
 #include <vector>
 
@@ -114,6 +113,9 @@ ID3D11Buffer*               g_pCBNeverChanges = nullptr;
 ID3D11Buffer*               g_pCBChangesEveryFrame = nullptr;
 ID3D11Buffer*               g_pCBCustomizable = nullptr;
 
+// Shader reflection
+ID3D11ShaderReflection*		g_pPixelShaderReflection = nullptr;
+
 // Demo
 TextureLib*					g_pTexturelib;
 Channel						g_Channels[4];
@@ -146,17 +148,16 @@ bool						g_bDefaultEditorSelected = false;
 float						g_fPlaySpeed = 1.0f;
 time_t						g_tTimeCreated;
 std::vector<std::string>	g_vShaderErrorList;
-std::string					g_strProject = "Test";
+std::string					g_strProject = "NewProject";
 std::string					g_strDefaultEditor = "";
 
-ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPADPP;
+ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
 ImGuiEnum::AspectRatio		g_eAspectRatio = ImGuiEnum::AspectRatio::E_NONE;
 ImGuiEnum::Resolution		g_eResolution = ImGuiEnum::Resolution::E_CUSTOM;
 
 ImVec4						g_vResourceWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vMainImageWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vControlWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-ImVec4						g_vViewToggleWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vShaderErrorWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
 std::vector<CustomizableBuffer> g_vCustomizableBuffer;
@@ -182,11 +183,27 @@ void				ImGuiSetup(HINSTANCE);
 void				ImGuiRender();
 
 
-void PopulateInitialVariables()
+//--------------------------------------------------------------------------------------
+// Populate initial variables
+//--------------------------------------------------------------------------------------
+void Initialize()
 {
 	int enumEditor = 1;
 	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColor, g_vAppSize, enumEditor, g_bAutoReload);
 	g_eDefaultEditor = static_cast<ImGuiEnum::DefaultEditor>(enumEditor);
+
+	const char* pathToCheck = "../../ShaderToyLibrary/";
+	DWORD dwAttrib = GetFileAttributes(pathToCheck);
+
+	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
+	{
+		// If this folder doesn't exist then we create it and create a new project 
+		const char* pathToCreate = "..\\..\\ShaderToyLibrary\\NewProject";
+		system((std::string("md ") + pathToCreate + std::string("\\channels")).c_str());
+		system((std::string("md ") + pathToCreate + std::string("\\shaders")).c_str());
+		system((std::string("xcopy ") + std::string(".\\channels ") + pathToCreate + std::string("\\channels") + std::string(" /i /E")).c_str());
+		system((std::string("xcopy ") + std::string(".\\shaders ") + pathToCreate + std::string("\\shaders") + std::string(" /i /E")).c_str());
+	}
 
 	if (g_strDefaultEditor != "" || exists == 1)
 		g_bDefaultEditorSelected = true;
@@ -205,6 +222,47 @@ void PopulateInitialVariables()
 	}
 }
 
+void DefaultImGuiWindows()
+{
+	const char* fileToCheck = "imgui.ini";
+	DWORD dwAttrib = GetFileAttributes(fileToCheck);
+
+	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
+	{
+		// if the imgui.ini file doesn't exist then the imgui windows will
+		// most likely be in odd shapes and sizes, so we need to fix it
+
+		float width = g_vAppSize.right - g_vAppSize.left;
+		float height = g_vAppSize.bottom - g_vAppSize.top;
+
+		g_bResChanged = true;
+		g_vControlWindow = ImVec4(
+			1.0f,
+			1.0f,
+			width * 0.18f,
+			height * 0.4f
+		);
+		g_vMainImageWindow = ImVec4(
+			5.0f + width * 0.18f,
+			height * 0.12f,
+			width * 0.67f,
+			height * 0.7f
+		);
+		g_vResourceWindow = ImVec4(
+			width * 0.85f + 10.0f,
+			height * 0.25f,
+			width * 0.14f,
+			height * 0.45f
+		);
+		g_vShaderErrorWindow = ImVec4(
+			1.0f,
+			height * 0.9f,
+			width * 0.7f,
+			height * 0.15f
+		);
+	}
+}
+
 //--------------------------------------------------------------------------------------
 // Entry point to the program. Initializes everything and goes into a message processing 
 // loop. Idle time is used to render the scene.
@@ -218,15 +276,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
-	PopulateInitialVariables();
+	Initialize();
 
 	if (FAILED(InitWindow(hInstance, nCmdShow)))
 		return 0;
 
 	//MessageBox(nullptr,
 	//	(LPCSTR)"Start Pix.", (LPCSTR)"Error", MB_OK);
-
-	PIXBeginEvent(0, "Initializing Device");
 	{
 		if (FAILED(InitDevice()))
 		{
@@ -234,7 +290,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			return 0;
 		}
 	}
-	PIXEndEvent(); // Initializing Device
+
+	DefaultImGuiWindows();
 
 	InitImGui();
 
@@ -253,7 +310,6 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		{
 			byte col = 0;
 
-			PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
 			{
 				// Possibly change project
 				if (g_bNewProjLoad)
@@ -262,30 +318,21 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					g_bNewProjLoad = false;
 				}
 
-				// Render the ShaderToy image
-				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Render");
 				{
 					Render();
 				}
-				PIXEndEvent(); // RENDER
 
 				if (!g_bFullscreen)
 				{
-					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
 					{
 						ImGuiSetup(hInstance);
 					}
-					PIXEndEvent(); // IMGUISETUP
 
-
-					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
 					{
 						ImGuiRender();
 					}
-					PIXEndEvent();
 				}
 
-				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Present");
 				{
 					//D3D_VERIFY(g_pSwapChain->Present(1, 0));
 					HRESULT hr = S_OK;
@@ -293,9 +340,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					if(hr != S_OK)
 						_RPTF2(_CRT_WARN, "Present error %i.\n", ((hr) & 0x0000FFFF));
 				}
-				PIXEndEvent(); // PRESENT
 			}
-			PIXEndEvent(); // MAIN LOOP
 		}
 	}
 
@@ -351,6 +396,86 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow)
 	ShowWindow(g_hWnd, nCmdShow);
 
 	return S_OK;
+}
+
+void GoFullscreen()
+{
+	const HWND hDesktop = GetDesktopWindow();
+	RECT desktop;
+	GetWindowRect(hDesktop, &desktop);
+
+	g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+
+	// Release all outstanding references to the swap chain's buffers.
+	g_pBackBufferRenderTargetView->Release();
+
+	HRESULT hr;
+	// Preserve the existing buffer count and format.
+	// Automatically choose the width and height to match the client rect for HWNDs.
+	hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+	// Perform error handling here!
+
+	// Get buffer and create a render-target-view.
+	ID3D11Texture2D* pBuffer;
+	hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+		(void**)&pBuffer);
+	// Perform error handling here!
+
+	hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
+		&g_pBackBufferRenderTargetView);
+	// Perform error handling here!
+	pBuffer->Release();
+
+	g_vWindowSize.x = (float)desktop.right;
+	g_vWindowSize.y = (float)desktop.bottom;
+
+	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+
+	Resize((float)desktop.right, (float)desktop.bottom);
+
+	g_pSwapChain->SetFullscreenState(TRUE, NULL);
+	g_bFullWindow = true;
+}
+
+void GoWindowed()
+{
+	const HWND hDesktop = GetDesktopWindow();
+	RECT desktop;
+	GetWindowRect(hDesktop, &desktop);
+
+	g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+
+	// Release all outstanding references to the swap chain's buffers.
+	g_pBackBufferRenderTargetView->Release();
+
+	HRESULT hr;
+	// Preserve the existing buffer count and format.
+	// Automatically choose the width and height to match the client rect for HWNDs.
+	hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+
+	// Perform error handling here!
+
+	// Get buffer and create a render-target-view.
+	ID3D11Texture2D* pBuffer;
+	hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+		(void**)&pBuffer);
+	// Perform error handling here!
+
+	hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
+		&g_pBackBufferRenderTargetView);
+	// Perform error handling here!
+	pBuffer->Release();
+
+	g_vWindowSize.x = (float)desktop.right;
+	g_vWindowSize.y = (float)desktop.bottom;
+
+	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+
+	Resize((float)desktop.right, (float)desktop.bottom);
+
+	g_pSwapChain->SetFullscreenState(FALSE, NULL);
+	g_bFullWindow = false;
 }
 
 
@@ -424,83 +549,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (g_bAlt)
 			{
 				if (!g_bFullWindow)
-				{
-					const HWND hDesktop = GetDesktopWindow();
-					RECT desktop;
-					GetWindowRect(hDesktop, &desktop);
-
-					g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
-
-					// Release all outstanding references to the swap chain's buffers.
-					g_pBackBufferRenderTargetView->Release();
-
-					HRESULT hr;
-					// Preserve the existing buffer count and format.
-					// Automatically choose the width and height to match the client rect for HWNDs.
-					hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-
-					// Perform error handling here!
-
-					// Get buffer and create a render-target-view.
-					ID3D11Texture2D* pBuffer;
-					hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
-						(void**)&pBuffer);
-					// Perform error handling here!
-
-					hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
-						&g_pBackBufferRenderTargetView);
-					// Perform error handling here!
-					pBuffer->Release();
-
-					g_vWindowSize.x = (float)desktop.right;
-					g_vWindowSize.y = (float)desktop.bottom;
-
-					g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
-
-					Resize((float)desktop.right, (float)desktop.bottom);
-
-					g_pSwapChain->SetFullscreenState(TRUE, NULL);
-					g_bFullWindow = true;
-				}
+					GoFullscreen();
 				else
-				{
-					const HWND hDesktop = GetDesktopWindow();
-					RECT desktop;
-					GetWindowRect(hDesktop, &desktop);
-
-					g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
-
-					// Release all outstanding references to the swap chain's buffers.
-					g_pBackBufferRenderTargetView->Release();
-
-					HRESULT hr;
-					// Preserve the existing buffer count and format.
-					// Automatically choose the width and height to match the client rect for HWNDs.
-					hr = g_pSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-
-					// Perform error handling here!
-
-					// Get buffer and create a render-target-view.
-					ID3D11Texture2D* pBuffer;
-					hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
-						(void**)&pBuffer);
-					// Perform error handling here!
-
-					hr = g_pd3dDevice->CreateRenderTargetView(pBuffer, NULL,
-						&g_pBackBufferRenderTargetView);
-					// Perform error handling here!
-					pBuffer->Release();
-
-					g_vWindowSize.x = (float)desktop.right;
-					g_vWindowSize.y = (float)desktop.bottom;
-
-					g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
-
-					Resize((float)desktop.right, (float)desktop.bottom);
-
-					g_pSwapChain->SetFullscreenState(FALSE, NULL);
-					g_bFullWindow = false;
-				}
+					GoWindowed();
 			}
 			break;
 		}
@@ -629,14 +680,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			pBuffer->Release();
 
 			// Resize and relocate ImGui windows
-			float xScale = (float)width / g_vAppSize.right;
-			float yScale = (float)height / g_vAppSize.bottom;
+			float xScale = (float)width / (g_vAppSize.right - g_vAppSize.left);
+			float yScale = (float)height / (g_vAppSize.bottom - g_vAppSize.top);
 
 			// Update where ImGui windows should be
 			ImGuiScaleMove(g_vResourceWindow, xScale, yScale);
 			ImGuiScaleMove(g_vMainImageWindow, xScale, yScale);
 			ImGuiScaleMove(g_vControlWindow, xScale, yScale);
-			ImGuiScaleMove(g_vViewToggleWindow, xScale, yScale);
 			ImGuiScaleMove(g_vShaderErrorWindow, xScale, yScale);
 
 			g_bResChanged = true;
@@ -647,8 +697,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
 		}
 
-		g_vAppSize.right = width;
-		g_vAppSize.bottom = height;
+		g_vAppSize.right = width + g_vAppSize.left;
+		g_vAppSize.bottom = height + g_vAppSize.top;
 
 		break;
 	}
@@ -800,7 +850,7 @@ HRESULT InitDevice()
 	std::wstring g_strProjectW(g_strProject.length(), L' '); // Make room for characters
 	 // Copy string to wstring.
 	std::copy(g_strProject.begin(), g_strProject.end(), g_strProjectW.begin());
-	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/VertexShader.hlsl")).c_str()), "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		MessageBox(nullptr,
@@ -856,11 +906,17 @@ HRESULT InitDevice()
 
 	// Create the pixel shader
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
-	pPSBlob->Release();
 	if (FAILED(hr))
 		return hr;
 
 	SetDebugObjectName(g_pPixelShader, "PixelShader");
+
+	hr = D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&g_pPixelShaderReflection);
+	if (FAILED(hr))
+	{
+		return hr;
+	}
+	pPSBlob->Release();
 
 	D3D11_BUFFER_DESC bd = {};
 	bd.Usage = D3D11_USAGE_DEFAULT;
@@ -918,6 +974,67 @@ HRESULT InitDevice()
 		return hr;
 	
 	InitResources(true);
+
+	D3D11_SHADER_DESC desc;
+	g_pPixelShaderReflection->GetDesc(&desc);
+
+	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
+
+	UINT sizeofBuffer = 0;
+
+	for (unsigned int iConstant = 0; iConstant < desc.ConstantBuffers; ++iConstant)
+	{
+		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = g_pPixelShaderReflection->GetConstantBufferByIndex(iConstant);
+
+		// bufferDesc holds the name of the buffer and how many variables it holds
+		D3D11_SHADER_BUFFER_DESC bufferDesc;
+		pConstantBuffer->GetDesc(&bufferDesc);
+
+		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
+		{
+			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
+			{
+				ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
+
+				D3D11_SHADER_VARIABLE_DESC varDesc;
+				pVar->GetDesc(&varDesc);
+
+				ID3D11ShaderReflectionType* newType = pVar->GetType();
+
+				D3D11_SHADER_TYPE_DESC typeDesc;
+				newType->GetDesc(&typeDesc);
+
+				for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
+				{
+					if (strcmp(varDesc.Name, g_vCustomizableBuffer[i].strVariable) == 0)
+					{
+						sizeofBuffer += varDesc.Size;
+						g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+
+						if (typeDesc.Type == D3D_SVT_FLOAT)
+						{
+							g_vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
+							g_vCustomizableBuffer[iVariables].isDataSet = true;
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+								((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+						}
+						else if (typeDesc.Type == D3D_SVT_INT)
+						{
+							g_vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
+							g_vCustomizableBuffer[iVariables].isDataSet = true;
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+								((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+						}
+
+						g_vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
+						g_vCustomizableBuffer[iVariables].size = varDesc.Size;
+					}
+				}
+			}
+		}
+	}
 
 	SetDebugObjectName(g_pCBNeverChanges, "ConstantBuffer_NeverChanges");
 	SetDebugObjectName(g_pCBChangesEveryFrame, "ConstantBuffer_ChangesEveryFrame");
@@ -1044,9 +1161,18 @@ void Resize(const float width, const float height)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
-			g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+			if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+			{
+				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
 
-			g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width - g_vPadding.x, height - g_vPadding.y, 0.0f, 0.0f);
+				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width - g_vPadding.x, height - g_vPadding.y, 0.0f, 0.0f);
+			}
+			else
+			{
+				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width), (UINT)(height));
+
+				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width, height, 0.0f, 0.0f);
+			}
 		}
 	}
 
@@ -1059,16 +1185,32 @@ void Resize(const float width, const float height)
 	g_pDepthStencilState->Release();
 	g_pDepthStencilBuffer->Release();
 
-	Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
-	CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+	if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+	{
+		Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+		CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+	}
+	else
+	{
+		Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)(width), (UINT)(height));
+		CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)(width), (UINT)(height));
+	}
 
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
 	g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, NULL);
 
 	// Resizing the viewport
 	D3D11_VIEWPORT vp;
-	vp.Width = (width - g_vPadding.x);
-	vp.Height = (height - g_vPadding.y);
+	if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+	{
+		vp.Width = (width - g_vPadding.x);
+		vp.Height = (height - g_vPadding.y);
+	}
+	else
+	{
+		vp.Width = width;
+		vp.Height = height;
+	}
 	vp.MinDepth = 0.0f;
 	vp.MaxDepth = 1.0f;
 	vp.TopLeftX = 0;
@@ -1256,11 +1398,16 @@ void Render()
 
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
+	for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
+	{
+		if(g_vCustomizableBuffer[i].isDataSet)
+			g_pImmediateContext->UpdateSubresource(g_pCBCustomizable, g_vCustomizableBuffer[i].offset, nullptr, g_vCustomizableBuffer[i].data, 0, 0);
+	}
+
 	// Set constant buffers
+	g_pImmediateContext->PSSetConstantBuffers(2, 1, &g_pCBCustomizable);
 	g_pImmediateContext->PSSetConstantBuffers(1, 1, &g_pCBChangesEveryFrame);
 	g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
-
-	PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
 
 	// Draw th triangles that make up the window
 	g_pImmediateContext->DrawIndexed(ARRAYSIZE(g_Indicies), 0, 0);
@@ -1359,6 +1506,10 @@ void ImGuiSetup(HINSTANCE hInstance)
 	if (ImGui::IsItemHovered())
 		g_bTrackMouse = false;
 
+	bool bGoFullChange = false;
+
+	KeepImGuiWindowsInsideApp(g_vAppSize, g_vControlWindow, g_bResChanged);
+
 	// Controls Window
 	int buttonPress = 0;
 	ControlWindow(
@@ -1379,23 +1530,27 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_bResChanged,
 		g_bNewProjLoad,
 		g_bDefaultEditorSelected,
+		g_bFullWindow,
+		bGoFullChange,
 		g_vControlWindow,
-		g_vMainImageWindow
+		g_vMainImageWindow,
+		g_vCustomizableBuffer
 	);
+
+	if (bGoFullChange)
+	{
+		if (!g_bFullWindow)
+			GoFullscreen();
+		else
+			GoWindowed();
+	}
 
 	if (buttonPress & 0x0001)
 		ReloadShaders();
 
-	// Box for ShaderToy image to be displayed in
-	if ((((int)g_vCurrentWindowSize.x != (int)g_vWindowSize.x && (int)g_vCurrentWindowSize.y != (int)g_vWindowSize.y) || g_bResChanged) && !g_bFullscreen)
-	{
-		if(g_bResChanged)
-			Resize(g_vMainImageWindow.z, g_vMainImageWindow.w);
-		else
-			Resize(g_vWindowSize.x, g_vWindowSize.y);
-	}
-
 	int iHovered = -1;
+
+	KeepImGuiWindowsInsideApp(g_vAppSize, g_vResourceWindow, g_bResChanged);
 
 	// Box for the resources
 	ResourceWindow(
@@ -1417,6 +1572,21 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_vResourceWindow
 	);
 
+	// Box for ShaderToy image to be displayed in
+	if ((((int)g_vCurrentWindowSize.x != (int)g_vWindowSize.x && (int)g_vCurrentWindowSize.y != (int)g_vWindowSize.y) || g_bResChanged) && !g_bFullscreen)
+	{
+		if (g_vWindowSize.x > 0.0f && g_vWindowSize.y > 0.0f && g_vMainImageWindow.z > 0.0f && g_vMainImageWindow.w > 0.0f)
+		{
+			if (g_bResChanged)
+				Resize(g_vMainImageWindow.z, g_vMainImageWindow.w);
+			else
+				Resize(g_vWindowSize.x, g_vWindowSize.y);
+
+		}
+	}
+
+	KeepImGuiWindowsInsideApp(g_vAppSize, g_vMainImageWindow, g_bResChanged);
+
 	MainImageWindow(
 		g_pShaderResourceView,
 		g_Resource,
@@ -1433,21 +1603,26 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_bTrackMouse, g_bFullscreen,
 		g_bResChanged, g_vMainImageWindow);
 
+	KeepImGuiWindowsInsideApp(g_vAppSize, g_vShaderErrorWindow, g_bResChanged);
+
 	// Shader Compiler Errors
-	ShaderErrorWindow(
-		g_Buffers, 
-		g_vShaderErrorList, 
-		g_strProject, 
-		g_strDefaultEditor, 
-		g_eDefaultEditor, 
-		g_bResChanged, 
-		g_vShaderErrorWindow
-	);
+	if (g_vShaderErrorList.size() > 0)
+	{
+		ShaderErrorWindow(
+			g_Buffers,
+			g_vShaderErrorList,
+			g_strProject,
+			g_strDefaultEditor,
+			g_eDefaultEditor,
+			g_bResChanged,
+			g_vShaderErrorWindow
+		);
+	}
 
 	// Selection of default editor
 	if (!g_bDefaultEditorSelected)
 	{	
-		ImVec2 size = ImVec2((float)(g_vAppSize.right + 5), (float)(g_vAppSize.bottom + 5));
+		ImVec2 size = ImVec2((float)(g_vAppSize.right + g_vPadding.x), (float)(g_vAppSize.bottom + g_vPadding.y));
 		ImGui::SetNextWindowFocus();
 		Barrier(size);
 		ImGui::SetNextWindowFocus();
@@ -1499,38 +1674,105 @@ void ReloadShaders()
 		return;
 	}
 
-	ID3D11ShaderReflection* lPixelShaderReflection = nullptr;
-	if (FAILED(D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&lPixelShaderReflection)))
+	if (FAILED(D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&g_pPixelShaderReflection)))
 	{
 		return;
 	}
 	pPSBlob->Release();
 
 	D3D11_SHADER_DESC desc;
-	lPixelShaderReflection->GetDesc(&desc);
+	g_pPixelShaderReflection->GetDesc(&desc);
 
+	std::vector<CustomizableBuffer> customizableBufferCopy;
+	for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
+	{
+		// Copy the customizable variables so we can maintain the potentially 
+		// modified values
+		CustomizableBuffer cb;
+		cb = g_vCustomizableBuffer[i];
+		customizableBufferCopy.push_back(cb);
+	}
+
+	// Read the shader
 	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
 
 	UINT sizeofBuffer = 0;
 
-	if(desc.ConstantBuffers >= 3)
+	for (unsigned int iConstant = 0; iConstant < desc.ConstantBuffers; ++iConstant)
 	{
-		int iConstantBuffer = 2;
-		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = lPixelShaderReflection->GetConstantBufferByIndex(iConstantBuffer);
+		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = g_pPixelShaderReflection->GetConstantBufferByIndex(iConstant);
 
 		// bufferDesc holds the name of the buffer and how many variables it holds
 		D3D11_SHADER_BUFFER_DESC bufferDesc;
 		pConstantBuffer->GetDesc(&bufferDesc);
 
-		for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
+		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
 		{
-			ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
+			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
+			{
+				ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
 
-			D3D11_SHADER_VARIABLE_DESC varDesc;
-			pVar->GetDesc(&varDesc);
+				D3D11_SHADER_VARIABLE_DESC varDesc;
+				pVar->GetDesc(&varDesc);
 
-			sizeofBuffer += varDesc.Size;
-			g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+				ID3D11ShaderReflectionType* newType = pVar->GetType();
+
+				D3D11_SHADER_TYPE_DESC typeDesc;
+				newType->GetDesc(&typeDesc);
+
+				for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
+				{
+					if (strcmp(varDesc.Name, g_vCustomizableBuffer[i].strVariable) == 0)
+					{
+						sizeofBuffer += varDesc.Size;
+						g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+
+						int copyIndex = -1;
+
+						for (int j = 0; j < customizableBufferCopy.size(); ++j)
+						{
+							if (strcmp(customizableBufferCopy[j].strVariable, varDesc.Name) == 0)
+							{
+								// we want to keep the values that have possibly been altered
+								customizableBufferCopy[j].isDataSet = true;
+								copyIndex = j;
+							}
+						}
+
+						if (typeDesc.Type == D3D_SVT_FLOAT)
+						{
+							g_vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+							{
+								if (customizableBufferCopy[iVariables].isDataSet && sizeof(float) * (i + 1) <= customizableBufferCopy[iVariables].size)
+									((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)(customizableBufferCopy[copyIndex]).data)[i];
+								else
+									((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+							}
+
+							g_vCustomizableBuffer[iVariables].isDataSet = true;
+						}
+						else if (typeDesc.Type == D3D_SVT_INT)
+						{
+							g_vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+							{
+								if (customizableBufferCopy[iVariables].isDataSet && sizeof(int) * (i + 1) <= customizableBufferCopy[iVariables].size)
+									((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)(customizableBufferCopy[copyIndex]).data)[i];
+								else
+									((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+							}
+
+							g_vCustomizableBuffer[iVariables].isDataSet = true;
+						}
+
+						g_vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
+						g_vCustomizableBuffer[iVariables].size = varDesc.Size;
+					}
+				}
+			}
 		}
 	}
 

@@ -17,6 +17,7 @@
 #include "HelperFunction.h"
 #include "type/Resource.h"
 #include "type/Channel.h"
+#include "type/ConstantBuffer.h"
 
 #include "../ImGuiFileDialog.h"
 
@@ -516,53 +517,57 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 				break;
 			case 7:
 				xRes = 1280;
-				yRes = 1024;
+				yRes = 800;
 				break;
 			case 8:
+				xRes = 1280;
+				yRes = 1024;
+				break;
+			case 9:
 				xRes = 1360;
 				yRes = 768;
 				break;
-			case 9:
+			case 10:
 				xRes = 1366;
 				yRes = 768;
 				break;
-			case 10:
+			case 11:
 				xRes = 1440;
 				yRes = 900;
 				break;
-			case 11:
+			case 12:
 				xRes = 1536;
 				yRes = 864;
 				break;
-			case 12:
+			case 13:
 				xRes = 1600;
 				yRes = 900;
 				break;
-			case 13:
+			case 14:
 				xRes = 1680;
 				yRes = 1050;
 				break;
-			case 14:
+			case 15:
 				xRes = 1920;
 				yRes = 1080;
 				break;
-			case 15:
+			case 16:
 				xRes = 1920;
 				yRes = 1200;
 				break;
-			case 16:
+			case 17:
 				xRes = 2560;
 				yRes = 1080;
 				break;
-			case 17:
+			case 18:
 				xRes = 2560;
 				yRes = 1440;
 				break;
-			case 18:
+			case 19:
 				xRes = 3440;
 				yRes = 1440;
 				break;
-			case 19:
+			case 20:
 				xRes = 3840;
 				yRes = 2160;
 				break;
@@ -577,6 +582,90 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 
 	resolution = static_cast<ImGuiEnum::Resolution>(item_current);
 	ImGui::PopItemWidth();
+}
+
+void CustomizableArea(
+	std::vector<CustomizableBuffer>& vCustomizableBuffer
+)
+{
+	for (int i = 0; i < vCustomizableBuffer.size(); ++i)
+	{
+
+		switch (vCustomizableBuffer[i].size)
+		{
+		case 4:
+			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderFloat(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputFloat(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].step);
+			}
+			else if (vCustomizableBuffer[i].type == 2) // INT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderInt(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputInt(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].step);
+			}
+			break;
+		case 8:
+			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderFloat2(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputFloat2(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
+			}
+			else if (vCustomizableBuffer[i].type == 2) // INT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderInt2(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputInt2(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+			}
+			break;
+		case 12:
+			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderFloat3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputFloat3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "colorEdit") == 0 
+					|| strcmp(vCustomizableBuffer[i].strCommand, "colourEdit") == 0)
+					ImGui::ColorEdit3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data);
+			}
+			else if (vCustomizableBuffer[i].type == 2) // INT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderInt3(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputInt3(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+			}
+			break;
+		case 16:
+			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderFloat4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputFloat4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "colorEdit") == 0
+					|| strcmp(vCustomizableBuffer[i].strCommand, "colourEdit") == 0)
+					ImGui::ColorEdit4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data);
+			}
+			else if (vCustomizableBuffer[i].type == 2) // INT
+			{
+				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
+					ImGui::SliderInt4(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
+				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
+					ImGui::InputInt4(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+			}
+			break;
+		}
+		//ImGui::ColorEdit3
+	}
 }
 
 //--------------------------------------------------------------------------------------
@@ -599,9 +688,11 @@ void ControlWindow(
 	float fDeltaT, float fScaling,
 	int iFrame, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
-	bool& bDefaultEditorSet,
+	bool& bDefaultEditorSet, bool bIsFullwindow,
+	bool& bGoFullscreenChange,
 	ImVec4& vWindowInfo,
-	ImVec4& vMainWindowInfo
+	ImVec4& vMainWindowInfo,
+	std::vector<CustomizableBuffer>& vCustomizableBuffer
 )
 {
 	ImGui::Begin("Control Panel");
@@ -747,6 +838,20 @@ void ControlWindow(
 	ImGui::InputFloat("playback", &playSpeed, 0.01f);
 	ImGui::PopItemWidth();
 
+	if (!bIsFullwindow)
+	{
+		if (ImGui::Button("Go Fullscreen", ImVec2(ImGui::GetWindowContentRegionMax().x, 30.0f)))
+		{
+			bGoFullscreenChange = true;
+		}
+	}
+	else
+	{
+		if (ImGui::Button("Go Windowed", ImVec2(ImGui::GetWindowContentRegionMax().x, 30.0f)))
+		{
+			bGoFullscreenChange = true;
+		}
+	}
 
 	ImGui::Separator();
 	// Default editor picker
@@ -773,9 +878,12 @@ void ControlWindow(
 	MainResolution(pRenderTargetTexture, aspectRatio, resolution, vMainWindowInfo, bResChanged);
 
 	ImGui::Separator();
-	ImGui::ColorEdit3("clear color", (float*)&clearColor); // Edit 3 floats representing a color
 
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	if (vCustomizableBuffer.size() > 0)
+	{
+		CustomizableArea(vCustomizableBuffer);
+	}
+
 	ImGui::Separator();
 
 	//Constant Buffer info
@@ -793,6 +901,13 @@ void ControlWindow(
 
 		ImGui::TreePop();
 	}
+
+	ImGui::Separator();
+	ImGui::Separator();
+	ImGui::Text("Application:");
+	ImGui::ColorEdit3("clear color", (float*)&clearColor); // Edit 3 floats representing a color
+
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 
 	ImGui::End();
@@ -905,7 +1020,7 @@ void MainImageWindow(
 	ImVec2 position = ImGui::GetWindowPos();
 
 	ImGui::SetCursorScreenPos(ImVec2(position.x + 10.0f, position.y + 60.0f));
-	if (ImGui::Button("Fullscreen"))
+	if (ImGui::Button("Expand"))
 		bFullscreen = !bFullscreen;
 
 	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor(1.0f, 1.0f, 1.0f, 0.0f));
@@ -1319,6 +1434,8 @@ void DefaultEditorSelector(ImVec2 pos, ImGuiEnum::DefaultEditor& defaultEditor, 
 	ImGui::InputText("Location:", wc, MAX_PATH);
 	ImGui::PopItemWidth(); 
 
+	ImGui::PushItemWidth(100.0f);
+
 	if (ImGui::Button("Done"))
 	{
 		std::string strWc = std::string(wc);
@@ -1329,7 +1446,14 @@ void DefaultEditorSelector(ImVec2 pos, ImGuiEnum::DefaultEditor& defaultEditor, 
 			strDefaultEditor = strWc;
 			defaultEditor = ImGuiEnum::DefaultEditor::E_OTHER;
 		}
+		else
+			defaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
 	}
+	ImGui::PopItemWidth();
+
+	ImGui::SameLine(100.0f);
+	ImGui::Text("*Can be left empty!");
+
 
 	ImGui::End();
 }
@@ -1346,6 +1470,7 @@ void Barrier(ImVec2 size)
 
 	ImGui::Begin("Barrier", 0, flags);
 
+	ImGui::SetWindowPos(ImVec2(0.0f, 0.0f));
 	ImGui::SetWindowSize(size);
 
 	ImGui::End();

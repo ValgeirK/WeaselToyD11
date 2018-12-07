@@ -9,6 +9,7 @@ struct ImVec4;
 typedef int ImGuiWindowFlags;
 struct ID3D11Texture2D;
 struct Channel;
+struct CustomizableBuffer;
 
 #include <vector>
 #include <string.h>
@@ -77,9 +78,11 @@ void ControlWindow(
 	float&, float,
 	float, float,
 	int, int&,
-	bool&, bool&, bool&,
+	bool&, bool&, bool&, bool,
+	bool&,
 	ImVec4&,
-	ImVec4&
+	ImVec4&,
+	std::vector<CustomizableBuffer>&
 );
 
 void MainImageWindow(

@@ -11,6 +11,11 @@ struct PS_INPUT
 	float2 uv : UV;
 };
 
+cbuffer cbCustomizable : register (b2)
+{
+	// slider color min -1.0 max 1.0
+};
+
 float4 main(PS_INPUT input) : SV_Target
 {
 	// Normalized pixel coordinates (from 0 to 1)
