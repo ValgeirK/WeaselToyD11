@@ -7,3 +7,7 @@ x64
 /WeaselToyD11/Release
 /WeaselToyD11/comctl32.dll
 /packages/WinPixEventRuntime.1.0.181027001
+
+
+/WeaselToyD11/imgui.ini
+/WeaselToyD11/settings.ini
