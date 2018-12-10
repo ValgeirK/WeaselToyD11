@@ -349,15 +349,15 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PopItemWidth();
 
 	int xRes = (int)desc.Width;
-	ImGui::SameLine(size.x - 225.0f);
-	ImGui::PushItemWidth(100.0f);
-	ImGui::InputInt("x", &xRes, 0, 100, ImGuiInputTextFlags_EnterReturnsTrue);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 5.0f);
+	ImGui::InputInt("x", &xRes, 0, size.x / 4.0f, ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
 
 	int yRes = desc.Height;
-	ImGui::SameLine(size.x - 108.0f);
-	ImGui::PushItemWidth(100.0f);
-	ImGui::InputInt("y", &yRes, 0, 100, ImGuiInputTextFlags_EnterReturnsTrue);
+	ImGui::SameLine(size.x - size.x / 5.0f - 21.0f);
+	ImGui::PushItemWidth(size.x / 4.0f);
+	ImGui::InputInt("y", &yRes, 0, size.x / 4.0f, ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
 
 	int xPadding = (int)(vMainWindowInfo.z - desc.Width);
@@ -383,8 +383,8 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Aspect Ratio:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(size.x - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 2.0f);
 	if (ImGui::Combo("Aspect Ratio", &item_current, aspectItems, IM_ARRAYSIZE(aspectItems)))
 	{
 		if (item_current != 0)
@@ -483,8 +483,8 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Set Resolutions:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(size.x - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 2.0f);
 	if (ImGui::Combo("Set Resolutions", &item_current, resolutionItems, IM_ARRAYSIZE(resolutionItems)))
 	{
 		if (item_current != 0)
@@ -684,7 +684,7 @@ void ControlWindow(
 	DirectX::XMFLOAT4 vMouse,
 	std::string& strProj,
 	bool& bPause, bool& bAutoReload,
-	float& fGameT, float playSpeed, 
+	float& fGameT, float& playSpeed, 
 	float fDeltaT, float fScaling,
 	int iFrame, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
@@ -806,7 +806,7 @@ void ControlWindow(
 
 	ImGui::Spacing();
 
-	if (ImGui::Button("Stop", ImVec2(100.0f, 25.0f)))
+	if (ImGui::Button("Stop", ImVec2(windowSize.x / 4.0f, 25.0f)))
 	{
 		bPause = true;
 		fGameT = 0.0f;
@@ -816,26 +816,26 @@ void ControlWindow(
 	if (bPause)
 		playButtonLabel = "Play";
 
-	if (ImGui::Button(playButtonLabel, ImVec2(100.0f, 25.0f)))
+	if (ImGui::Button(playButtonLabel, ImVec2(windowSize.x / 4.0f, 25.0f)))
 		bPause = !bPause;
 
 	ImGui::SameLine();
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-	ImGui::PushItemWidth(150.0f);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - windowSize.x / 3.0f);
+	ImGui::PushItemWidth(windowSize.x / 3.0f);
 	ImGui::Text("Play Speed:");
 	ImGui::PopItemWidth();
 
 	const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
 
-	if (ImGui::Button("Reload Shaders", ImVec2(200.0f + ItemSpacing, 25.0f)))
+	if (ImGui::Button("Reload Shaders", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
 	{
 		buttonPress += 0x0001;
 	}
 
 	ImGui::SameLine();
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-	ImGui::PushItemWidth(150.0f);
-	ImGui::InputFloat("playback", &playSpeed, 0.01f);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - windowSize.x / 3.0f);
+	ImGui::PushItemWidth(windowSize.x / 3.0f);
+	ImGui::InputFloat("playback", &playSpeed, 0.01f, 0.0f, "%.2f");
 	ImGui::PopItemWidth();
 
 	if (!bIsFullwindow)
@@ -860,8 +860,8 @@ void ControlWindow(
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Default Editor:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(vWindowInfo.z - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(windowSize.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(windowSize.x / 2.0f);
 	if (ImGui::Combo("Default Editor", &item_current, editorItems, IM_ARRAYSIZE(editorItems)))
 	{
 		if (item_current == static_cast<int>(ImGuiEnum::DefaultEditor::E_OTHER))
@@ -907,7 +907,7 @@ void ControlWindow(
 	ImGui::Text("Application:");
 	ImGui::ColorEdit3("clear color", (float*)&clearColor); // Edit 3 floats representing a color
 
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	ImGui::Text("App avg. %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 
 	ImGui::End();

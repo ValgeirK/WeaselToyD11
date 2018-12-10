@@ -1074,10 +1074,13 @@ void InitImGui()
 	case 3840:
 		// 4K
 		g_fDPIscale = 1.1f;
+		io.FontGlobalScale = 1.2f * g_fDPIscale;
+		break;
+	default:
+		io.FontGlobalScale = 1.0f;
 		break;
 	}
 
-	io.FontGlobalScale = 1.2f * g_fDPIscale;
 
 	ImGui_ImplWin32_Init(g_hWnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pImmediateContext);
