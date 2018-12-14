@@ -175,6 +175,7 @@
     <ClInclude Include="common\Textures.h" />
     <ClInclude Include="common\type\Channel.h" />
     <ClInclude Include="common\type\ConstantBuffer.h" />
+    <ClInclude Include="common\type\HashDefines.h" />
     <ClInclude Include="common\type\Resource.h" />
     <ClInclude Include="dirent\dirent.h" />
     <ClInclude Include="ImGuiFileDialog.h" />

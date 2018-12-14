@@ -75,7 +75,7 @@ void ControlWindow(
 	DirectX::XMFLOAT4,
 	std::string&,
 	bool&, bool&,
-	float&, float,
+	float&, float&,
 	float, float,
 	int, int&,
 	bool&, bool&, bool&, bool,

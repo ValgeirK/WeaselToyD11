@@ -126,7 +126,8 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 		}
 	}
 
-	channels[i-1] = ch;
+	if(size != 0)
+		channels[i-1] = ch;
 
 	return true;
 }
@@ -138,6 +139,8 @@ const char* GetType(Channels::ChannelType type)
 {
 	switch (type)
 	{
+	case Channels::ChannelType::E_None:
+		return "none";
 	case Channels::ChannelType::E_Buffer:
 		return "buffer";
 	case Channels::ChannelType::E_Texture:
@@ -187,8 +190,6 @@ const char* GetBuffer(Channels::BufferId id)
 		return "c";
 	case Channels::BufferId::E_BufferD:
 		return "d";
-	default:
-		return "a";
 	}
 }
 
@@ -214,7 +215,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 
 	fprintf(file, "s %i\n\n", size);
 
-	for (int i = 0; i < size; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
 		if (channels[i].m_Type >= 0)
 		{
@@ -247,7 +248,7 @@ bool WriteIni(const char* strProj, const char* strEditor, ImVec4 vColor, RECT vA
 	fprintf(file, "editorEnum: %d\n", iEditor);
 	fprintf(file, "autoReload: %d\n", autoReload);
 	fprintf(file, "bgColor: %f %f %f %f\n", vColor.x, vColor.y, vColor.w, vColor.z);
-	fprintf(file, "appSize: %d %d\n", vAppSize.right, vAppSize.bottom);
+	fprintf(file, "appSize: %d %d %d %d\n", vAppSize.left, vAppSize.right, vAppSize.top, vAppSize.bottom);
 
 	fclose(file);
 
@@ -299,7 +300,7 @@ bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT&
 	sscanf(line, "%s %f %f %f %f\n", &dummy, &vColor.x, &vColor.y, &vColor.w, &vColor.z);
 
 	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %d %d\n", &dummy, &vAppSize.right, &vAppSize.bottom);
+	sscanf(line, "%s %d %d %d %d\n", &dummy, &vAppSize.left, &vAppSize.right, &vAppSize.top, &vAppSize.bottom);
 
 	strProj = std::string(proj);
 	autoReload = enumer == 1 ? true : false;

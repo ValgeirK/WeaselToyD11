@@ -42,6 +42,7 @@ bool GetStringRegKey(
 		GetStringRegKey(hKey, strValueName, strValue, strStrDefaultValue);
 		RegCloseKey(hKey);
 	}
-	else
-		return bExistsAndSuccess;
+	
+
+	return bExistsAndSuccess;
 }

@@ -96,7 +96,6 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 
 		CustomizableBuffer cb;
 
-		inputFile.getline(line, MAX_PATH);
 		int check = sscanf(line, "%s %s", &dummy, &strCommand);
 
 		if (strcmp(strCommand, "slider") == 0)
@@ -137,7 +136,139 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 			vCustomizableBuffer.push_back(cb);
 		}
 
+
+		inputFile.getline(line, MAX_PATH);
 	} while (strcmp(dummy, "};") != 0);
 
 	return S_OK;
+}
+
+void ShaderReflectionAndPopulation(
+	ID3D11ShaderReflection* pPixelShaderReflection, 
+	std::vector<CustomizableBuffer>& vCustomizableBuffer, 
+	UINT& iCustomizableBufferSize,
+	std::vector<CustomizableBuffer> vCustomizableBufferCopy
+)
+{
+	D3D11_SHADER_DESC desc;
+	pPixelShaderReflection->GetDesc(&desc);
+
+	for (unsigned int iConstant = 0; iConstant < desc.ConstantBuffers; ++iConstant)
+	{
+		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = pPixelShaderReflection->GetConstantBufferByIndex(iConstant);
+
+		// bufferDesc holds the name of the buffer and how many variables it holds
+		D3D11_SHADER_BUFFER_DESC bufferDesc;
+		pConstantBuffer->GetDesc(&bufferDesc);
+
+		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
+		{
+			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
+			{
+				ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
+
+				D3D11_SHADER_VARIABLE_DESC varDesc;
+				pVar->GetDesc(&varDesc);
+
+				ID3D11ShaderReflectionType* newType = pVar->GetType();
+
+				D3D11_SHADER_TYPE_DESC typeDesc;
+				newType->GetDesc(&typeDesc);
+				
+				bool isFound = false;
+
+				for (int i = 0; i < vCustomizableBuffer.size(); ++i)
+				{
+					if (strcmp(varDesc.Name, vCustomizableBuffer[i].strVariable) == 0)
+					{
+						// variable was found with a command in shader
+						iCustomizableBufferSize += varDesc.Size;
+						vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+
+						int copyIndex = -1;
+
+						for (int j = 0; j < vCustomizableBufferCopy.size(); ++j)
+						{
+							if (strcmp(vCustomizableBufferCopy[j].strVariable, varDesc.Name) == 0)
+							{
+								// we want to keep the values that have possibly been altered
+								vCustomizableBufferCopy[j].isDataSet = true;
+								copyIndex = j;
+							}
+						}
+
+						if (typeDesc.Type == D3D_SVT_FLOAT)
+						{
+							vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
+							vCustomizableBuffer[iVariables].isDataSet = true;
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+							{
+								if (copyIndex >= 0)
+									((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)(vCustomizableBufferCopy[copyIndex]).data)[i];
+								else
+									((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+							}
+						}
+						else if (typeDesc.Type == D3D_SVT_INT)
+						{
+							vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
+							vCustomizableBuffer[iVariables].isDataSet = true;
+
+							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+							{
+								if (copyIndex >= 0)
+									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)(vCustomizableBufferCopy[copyIndex]).data)[i];
+								else
+									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+							}
+						}
+
+						vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
+						vCustomizableBuffer[iVariables].size = varDesc.Size;
+
+						isFound = true;
+					}
+				}
+
+				if(!isFound)
+				{
+					// variable was not found with a command in the shader
+					iCustomizableBufferSize += varDesc.Size;
+
+					CustomizableBuffer cb;
+					strcpy(cb.strCommand, "input");
+					strcpy(cb.strVariable, varDesc.Name);
+					cb.offset = varDesc.StartOffset;
+					cb.size = varDesc.Size;
+
+					if (typeDesc.Type == D3D_SVT_FLOAT)
+					{
+						cb.data = new float[varDesc.Size / 4];
+						cb.isDataSet = true;
+
+						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+						{
+							cb.step = 0.1f;
+							((float*)cb.data)[i] = ((float*)varDesc.DefaultValue)[i];
+						}
+					}
+					else if (typeDesc.Type == D3D_SVT_INT)
+					{
+						cb.data = new int[varDesc.Size / 4];
+						cb.isDataSet = true;
+
+						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
+						{
+							cb.step = 1.0f;
+							((int*)cb.data)[i] = ((int*)varDesc.DefaultValue)[i];
+						}
+					}
+					cb.type = static_cast<int>(typeDesc.Type);
+
+					vCustomizableBuffer.push_back(cb);
+				}
+			}
+		}
+	}
 }

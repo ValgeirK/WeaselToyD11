@@ -95,7 +95,7 @@ HRESULT Buffer::InitBuffer(
 		return S_FALSE;
 
 	// Load texture
-	for (int i = 0; i < m_iSize; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
 		int iBufferIndex = static_cast<int>(index);
 		if (m_Channels[i].m_Type == Channels::ChannelType::E_Texture)
@@ -126,6 +126,7 @@ HRESULT Buffer::InitBuffer(
 		}
 		else
 		{
+			m_Res[i].m_Type = Channels::ChannelType::E_None;
 			m_Res[i].m_pShaderResource = nullptr;
 		}
 

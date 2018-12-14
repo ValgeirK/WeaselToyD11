@@ -9,6 +9,7 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include <directxcolors.h>
+#include <pix3.h>
 #include <string.h>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include "common/type/ConstantBuffer.h"
 #include "common/type/Channel.h"
 #include "common/type/Resource.h"
+#include "common/type/HashDefines.h"
 
 
 //--------------------------------------------------------------------------------------
@@ -93,10 +95,10 @@ ID3D11VertexShader*         g_pVertexShader = nullptr;
 ID3D11PixelShader*          g_pPixelShader = nullptr;
 
 // Resource
-Resource					g_Resource[4];
+Resource					g_Resource[MAX_RESORCES];
 
 // Buffers
-Buffer						g_Buffers[4];
+Buffer						g_Buffers[MAX_RESORCES];
 
 // ShaderToy Image
 ID3D11Texture2D*			g_pRenderTargetTexture = nullptr;
@@ -118,7 +120,7 @@ ID3D11ShaderReflection*		g_pPixelShaderReflection = nullptr;
 
 // Demo
 TextureLib*					g_pTexturelib;
-Channel						g_Channels[4];
+Channel						g_Channels[MAX_RESORCES];
 DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
 RECT						g_vAppSize = { 0, 0, 0, 0 };
@@ -160,7 +162,8 @@ ImVec4						g_vMainImageWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vControlWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vShaderErrorWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-std::vector<CustomizableBuffer> g_vCustomizableBuffer;
+std::vector<CustomizableBuffer>					g_vCustomizableBuffer;
+UINT											g_iCustomizableBufferSize = 0;
 std::chrono::high_resolution_clock::time_point	g_tLastClick;
 
 
@@ -232,8 +235,8 @@ void DefaultImGuiWindows()
 		// if the imgui.ini file doesn't exist then the imgui windows will
 		// most likely be in odd shapes and sizes, so we need to fix it
 
-		float width = g_vAppSize.right - g_vAppSize.left;
-		float height = g_vAppSize.bottom - g_vAppSize.top;
+		float width = (float)(g_vAppSize.right - g_vAppSize.left);
+		float height = (float)(g_vAppSize.bottom - g_vAppSize.top);
 
 		g_bResChanged = true;
 		g_vControlWindow = ImVec4(
@@ -283,6 +286,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 	//MessageBox(nullptr,
 	//	(LPCSTR)"Start Pix.", (LPCSTR)"Error", MB_OK);
+
+	PIXBeginEvent(0, "Initializing Device");
 	{
 		if (FAILED(InitDevice()))
 		{
@@ -290,6 +295,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			return 0;
 		}
 	}
+	PIXEndEvent(); // Initializing Device
 
 	DefaultImGuiWindows();
 
@@ -310,6 +316,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		{
 			byte col = 0;
 
+			PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
 			{
 				// Possibly change project
 				if (g_bNewProjLoad)
@@ -318,21 +325,30 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					g_bNewProjLoad = false;
 				}
 
+				// Render the ShaderToy image
+				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Render");
 				{
 					Render();
 				}
+				PIXEndEvent(); // RENDER
 
 				if (!g_bFullscreen)
 				{
+					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
 					{
 						ImGuiSetup(hInstance);
 					}
+					PIXEndEvent(); // IMGUISETUP
 
+
+					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
 					{
 						ImGuiRender();
 					}
+					PIXEndEvent();
 				}
 
+				PIXBeginEvent(PIX_COLOR_INDEX(col++), "Present");
 				{
 					//D3D_VERIFY(g_pSwapChain->Present(1, 0));
 					HRESULT hr = S_OK;
@@ -340,7 +356,9 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					if(hr != S_OK)
 						_RPTF2(_CRT_WARN, "Present error %i.\n", ((hr) & 0x0000FFFF));
 				}
+				PIXEndEvent(); // PRESENT
 			}
+			PIXEndEvent(); // MAIN LOOP
 		}
 	}
 
@@ -967,74 +985,17 @@ HRESULT InitDevice()
 	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBChangesEveryFrame);
 	if (FAILED(hr))
 		return hr;
-
-	bd.ByteWidth = 16;
-	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
-	if (FAILED(hr))
-		return hr;
 	
 	InitResources(true);
 
-	D3D11_SHADER_DESC desc;
-	g_pPixelShaderReflection->GetDesc(&desc);
-
 	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
 
-	UINT sizeofBuffer = 0;
+	ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, std::vector<CustomizableBuffer>());
 
-	for (unsigned int iConstant = 0; iConstant < desc.ConstantBuffers; ++iConstant)
-	{
-		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = g_pPixelShaderReflection->GetConstantBufferByIndex(iConstant);
-
-		// bufferDesc holds the name of the buffer and how many variables it holds
-		D3D11_SHADER_BUFFER_DESC bufferDesc;
-		pConstantBuffer->GetDesc(&bufferDesc);
-
-		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
-		{
-			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
-			{
-				ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
-
-				D3D11_SHADER_VARIABLE_DESC varDesc;
-				pVar->GetDesc(&varDesc);
-
-				ID3D11ShaderReflectionType* newType = pVar->GetType();
-
-				D3D11_SHADER_TYPE_DESC typeDesc;
-				newType->GetDesc(&typeDesc);
-
-				for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
-				{
-					if (strcmp(varDesc.Name, g_vCustomizableBuffer[i].strVariable) == 0)
-					{
-						sizeofBuffer += varDesc.Size;
-						g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
-
-						if (typeDesc.Type == D3D_SVT_FLOAT)
-						{
-							g_vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
-							g_vCustomizableBuffer[iVariables].isDataSet = true;
-
-							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
-								((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
-						}
-						else if (typeDesc.Type == D3D_SVT_INT)
-						{
-							g_vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
-							g_vCustomizableBuffer[iVariables].isDataSet = true;
-
-							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
-								((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
-						}
-
-						g_vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
-						g_vCustomizableBuffer[iVariables].size = varDesc.Size;
-					}
-				}
-			}
-		}
-	}
+	bd.ByteWidth = (g_iCustomizableBufferSize / 16 + 1) * 16;
+	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
+	if (FAILED(hr))
+		return hr;
 
 	SetDebugObjectName(g_pCBNeverChanges, "ConstantBuffer_NeverChanges");
 	SetDebugObjectName(g_pCBChangesEveryFrame, "ConstantBuffer_ChangesEveryFrame");
@@ -1074,10 +1035,12 @@ void InitImGui()
 	case 3840:
 		// 4K
 		g_fDPIscale = 1.1f;
+		io.FontGlobalScale = 1.2f * g_fDPIscale;
+		break;
+	default:
+		io.FontGlobalScale = 1.0f;
 		break;
 	}
-
-	io.FontGlobalScale = 1.2f * g_fDPIscale;
 
 	ImGui_ImplWin32_Init(g_hWnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pImmediateContext);
@@ -1094,7 +1057,7 @@ HRESULT InitResources(bool bLoadTextures)
 	HRESULT hr = S_OK;
 	int size = 0;
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		// Initializing all the buffers but they have the active flag set to false
 		g_Buffers[i] = Buffer();
@@ -1110,7 +1073,7 @@ HRESULT InitResources(bool bLoadTextures)
 	if (!LoadChannels((std::string("../../ShaderToyLibrary/") + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
 		return S_FALSE;
 
-	for (int i = 0; i < size; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
@@ -1157,7 +1120,7 @@ HRESULT InitResources(bool bLoadTextures)
 void Resize(const float width, const float height)
 {
 	// Updating the texture size per buffer
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
@@ -1239,7 +1202,7 @@ void AutoReload()
 
 	std::string path = std::string("../../ShaderToyLibrary/") + g_strProject;
 
-	for (int i = 0; i < 5; ++i)
+	for (int i = 0; i < MAX_RESORCES + 1; ++i)
 	{
 		if (_stat((path + std::string(filename[i])).c_str(), &result) == 0)
 		{
@@ -1271,7 +1234,7 @@ void Render()
 
 	if (g_pTexturelib->m_bReload)
 	{
-		for (int i = 0; i < 4; ++i)
+		for (int i = 0; i < MAX_RESORCES; ++i)
 		{
 			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
 			{
@@ -1286,7 +1249,7 @@ void Render()
 		g_pTexturelib->m_bReload = false;
 	}
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		// Update buffers
 		if (g_Buffers[i].m_bIsActive)
@@ -1296,7 +1259,7 @@ void Render()
 		}
 	}
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		// Bind the correct textures and buffer resources
 		if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
@@ -1398,16 +1361,41 @@ void Render()
 
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
+	void* customizableBufferData = malloc((g_iCustomizableBufferSize / 16 + 1) * 16);
+
 	for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
 	{
-		if(g_vCustomizableBuffer[i].isDataSet)
-			g_pImmediateContext->UpdateSubresource(g_pCBCustomizable, g_vCustomizableBuffer[i].offset, nullptr, g_vCustomizableBuffer[i].data, 0, 0);
+		if (g_vCustomizableBuffer[i].isDataSet)
+		{
+			if (g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT)
+			{
+				for (int j = 0; j < g_vCustomizableBuffer[i].size / SIZE_OF_FLOAT; ++j)
+					((float*)customizableBufferData)[g_vCustomizableBuffer[i].offset / SIZE_OF_FLOAT + j] = ((float*)g_vCustomizableBuffer[i].data)[j];
+			}
+			else if (g_vCustomizableBuffer[i].type == D3D_SVT_INT)
+			{
+				for (int j = 0; j < g_vCustomizableBuffer[i].size / SIZE_OF_INT; ++j)
+					((int*)customizableBufferData)[g_vCustomizableBuffer[i].offset / SIZE_OF_INT + j] = ((int*)g_vCustomizableBuffer[i].data)[j];
+			}
+			else
+				// Currently not supporting other types
+				assert(g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT || g_vCustomizableBuffer[i].type == D3D_SVT_INT);
+		}
+		else
+			// Data should be set
+			assert(g_vCustomizableBuffer[i].isDataSet);
 	}
+	g_pImmediateContext->UpdateSubresource(g_pCBCustomizable, 0, nullptr, customizableBufferData, 0, 0);
+
+	free(customizableBufferData);
+	customizableBufferData = nullptr;
 
 	// Set constant buffers
 	g_pImmediateContext->PSSetConstantBuffers(2, 1, &g_pCBCustomizable);
 	g_pImmediateContext->PSSetConstantBuffers(1, 1, &g_pCBChangesEveryFrame);
 	g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pCBNeverChanges);
+
+	PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
 
 	// Draw th triangles that make up the window
 	g_pImmediateContext->DrawIndexed(ARRAYSIZE(g_Indicies), 0, 0);
@@ -1440,7 +1428,7 @@ void CleanupDevice()
 
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
@@ -1639,7 +1627,7 @@ void ReloadShaders()
 {
 	HRESULT hr = S_OK;
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, g_strProject.c_str(), i);
@@ -1696,90 +1684,12 @@ void ReloadShaders()
 	// Read the shader
 	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
 
-	UINT sizeofBuffer = 0;
-
-	for (unsigned int iConstant = 0; iConstant < desc.ConstantBuffers; ++iConstant)
-	{
-		ID3D11ShaderReflectionConstantBuffer* pConstantBuffer = g_pPixelShaderReflection->GetConstantBufferByIndex(iConstant);
-
-		// bufferDesc holds the name of the buffer and how many variables it holds
-		D3D11_SHADER_BUFFER_DESC bufferDesc;
-		pConstantBuffer->GetDesc(&bufferDesc);
-
-		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
-		{
-			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
-			{
-				ID3D11ShaderReflectionVariable* pVar = pConstantBuffer->GetVariableByIndex(iVariables);
-
-				D3D11_SHADER_VARIABLE_DESC varDesc;
-				pVar->GetDesc(&varDesc);
-
-				ID3D11ShaderReflectionType* newType = pVar->GetType();
-
-				D3D11_SHADER_TYPE_DESC typeDesc;
-				newType->GetDesc(&typeDesc);
-
-				for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
-				{
-					if (strcmp(varDesc.Name, g_vCustomizableBuffer[i].strVariable) == 0)
-					{
-						sizeofBuffer += varDesc.Size;
-						g_vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
-
-						int copyIndex = -1;
-
-						for (int j = 0; j < customizableBufferCopy.size(); ++j)
-						{
-							if (strcmp(customizableBufferCopy[j].strVariable, varDesc.Name) == 0)
-							{
-								// we want to keep the values that have possibly been altered
-								customizableBufferCopy[j].isDataSet = true;
-								copyIndex = j;
-							}
-						}
-
-						if (typeDesc.Type == D3D_SVT_FLOAT)
-						{
-							g_vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
-
-							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
-							{
-								if (customizableBufferCopy[iVariables].isDataSet && sizeof(float) * (i + 1) <= customizableBufferCopy[iVariables].size)
-									((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)(customizableBufferCopy[copyIndex]).data)[i];
-								else
-									((float*)g_vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
-							}
-
-							g_vCustomizableBuffer[iVariables].isDataSet = true;
-						}
-						else if (typeDesc.Type == D3D_SVT_INT)
-						{
-							g_vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
-
-							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
-							{
-								if (customizableBufferCopy[iVariables].isDataSet && sizeof(int) * (i + 1) <= customizableBufferCopy[iVariables].size)
-									((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)(customizableBufferCopy[copyIndex]).data)[i];
-								else
-									((int*)g_vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
-							}
-
-							g_vCustomizableBuffer[iVariables].isDataSet = true;
-						}
-
-						g_vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
-						g_vCustomizableBuffer[iVariables].size = varDesc.Size;
-					}
-				}
-			}
-		}
-	}
+	ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, customizableBufferCopy);
 
 	D3D11_BUFFER_DESC bd = {};
 
 	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = (sizeofBuffer / 16 + 1) * 16;
+	bd.ByteWidth = (g_iCustomizableBufferSize / 16 + 1) * 16;
 	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	bd.CPUAccessFlags = 0;
 
@@ -1827,15 +1737,16 @@ HRESULT LoadProject()
 	if (FAILED(hr))
 		return hr;
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
 			g_Buffers[i].Release(i);
-		}
 
-		if (g_Resource[i].m_pSampler)
-			g_Resource[i].m_pSampler->Release();
+
+			if (g_Resource[i].m_pSampler)
+				g_Resource[i].m_pSampler->Release();
+		}
 	}
 
 	InitResources(false);

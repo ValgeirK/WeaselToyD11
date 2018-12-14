@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <d3d11.h>
+#include <d3d11shader.h>
 #include <vector>
 #include <string.h>
 
@@ -12,6 +13,22 @@ struct CustomizableBuffer;
 //
 // With VS 11, we could load up prebuilt .cso files instead...
 //--------------------------------------------------------------------------------------
-HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob** ppBlobOut, std::vector<std::string>& errorList);
+HRESULT CompileShaderFromFile(
+	const WCHAR* szFileName, 
+	LPCSTR szEntryPoint, 
+	LPCSTR szShaderModel, 
+	ID3DBlob** ppBlobOut, 
+	std::vector<std::string>& errorList
+);
 
-HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableBuffer>& vCustomizableBuffer);
+HRESULT ScanShaderForCustomizable(
+	const char* strProj, 
+	std::vector<CustomizableBuffer>& vCustomizableBuffer
+);
+
+void ShaderReflectionAndPopulation(
+	ID3D11ShaderReflection*,
+	std::vector<CustomizableBuffer>&,
+	UINT&,
+	std::vector<CustomizableBuffer>
+);

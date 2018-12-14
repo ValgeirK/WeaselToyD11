@@ -49,6 +49,7 @@ struct CustomizableBuffer
 		min = cb.min;
 		max = cb.max;
 		step = cb.step;
+		isDataSet = cb.isDataSet;
 
 		if (type == 2) // INT
 		{

@@ -239,11 +239,12 @@ void ErrorLine(std::string strName, std::string strProj, std::string strDefaultE
 	}
 }
 
-void OverlayLabel(const char* strName, ImVec2 windowSize)
+void OverlayLabel(const char* strName)
 {
-	ImGui::SameLine(12.0f);
+	ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor(1.0f, 1.0f, 1.0f, 1.0f));
 	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor(1.0f, 1.0f, 1.0f, 0.0f));
-	ImGui::Button(strName, ImVec2((windowSize.x - 25.0f) / 4.0f, (windowSize.y / 4.0f - 18.0f) / 8.0f));
+	ImGui::Button(strName);
+	ImGui::PopStyleColor();
 	ImGui::PopStyleColor();
 }
 
@@ -311,23 +312,35 @@ void ConstantBufferInfoWindow(ID3D11Texture2D* pRenderTargetTexture,
 	ImGui::PopItemWidth();
 
 	ImGui::Text("Mouse:");
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 280.0f * scaling);
-	ImGui::PushItemWidth(280.0f * scaling);
-	ImGui::Text("x:%.4f y:%.4f LC:%u RC:%u", vMouse.x, vMouse.y, (int)vMouse.z, (int)vMouse.w);
+	ImGui::PushItemWidth(100.0f * scaling);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::Text("x:%.2f", vMouse.x);
+	ImGui::NewLine();
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::Text("y:%.2f", vMouse.y);
+	ImGui::NewLine();
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::Text("LC:%u", (int)vMouse.z);
+	ImGui::NewLine();
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::Text("RC:%u", (int)vMouse.w);
 	ImGui::PopItemWidth();
 
 	// Get time
 	time_t now = time(0);
 	struct tm ltm;
 	localtime_s(&ltm, &now);
-	int hour = 1 + ltm.tm_hour;
-	int min = 1 + ltm.tm_min;
-	int sec = 1 + ltm.tm_sec;
+	int hour = ltm.tm_hour;
+	int min = ltm.tm_min;
+	int sec = ltm.tm_sec;
 
 	ImGui::Text("Date:");
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 210.0f * scaling);
-	ImGui::PushItemWidth(210.0f * scaling);
-	ImGui::Text("%u:%u:%u %u seconds", ltm.tm_mday, 1 + ltm.tm_mon, 1900 + ltm.tm_year, ((hour * 60 + min) * 60) + sec);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::PushItemWidth(100.0f * scaling);
+	ImGui::Text("%u/%u/%u", ltm.tm_mday, 1 + ltm.tm_mon, 1900 + ltm.tm_year);
+	ImGui::NewLine();
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 100.0f * scaling);
+	ImGui::Text("%u:%u:%u", hour, min, sec);
 	ImGui::PopItemWidth();
 
 	ImGui::Separator();
@@ -349,14 +362,14 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PopItemWidth();
 
 	int xRes = (int)desc.Width;
-	ImGui::SameLine(size.x - 225.0f);
-	ImGui::PushItemWidth(100.0f);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 5.0f);
 	ImGui::InputInt("x", &xRes, 0, 100, ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
 
 	int yRes = desc.Height;
-	ImGui::SameLine(size.x - 108.0f);
-	ImGui::PushItemWidth(100.0f);
+	ImGui::SameLine(size.x - size.x / 5.0f - 21.0f);
+	ImGui::PushItemWidth(size.x / 4.0f);
 	ImGui::InputInt("y", &yRes, 0, 100, ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
 
@@ -383,8 +396,8 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Aspect Ratio:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(size.x - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 2.0f);
 	if (ImGui::Combo("Aspect Ratio", &item_current, aspectItems, IM_ARRAYSIZE(aspectItems)))
 	{
 		if (item_current != 0)
@@ -483,8 +496,8 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Set Resolutions:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(size.x - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(size.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(size.x / 2.0f);
 	if (ImGui::Combo("Set Resolutions", &item_current, resolutionItems, IM_ARRAYSIZE(resolutionItems)))
 	{
 		if (item_current != 0)
@@ -684,7 +697,7 @@ void ControlWindow(
 	DirectX::XMFLOAT4 vMouse,
 	std::string& strProj,
 	bool& bPause, bool& bAutoReload,
-	float& fGameT, float playSpeed, 
+	float& fGameT, float& playSpeed, 
 	float fDeltaT, float fScaling,
 	int iFrame, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
@@ -806,7 +819,7 @@ void ControlWindow(
 
 	ImGui::Spacing();
 
-	if (ImGui::Button("Stop", ImVec2(100.0f, 25.0f)))
+	if (ImGui::Button("Stop", ImVec2(windowSize.x / 4.0f, 25.0f)))
 	{
 		bPause = true;
 		fGameT = 0.0f;
@@ -816,26 +829,26 @@ void ControlWindow(
 	if (bPause)
 		playButtonLabel = "Play";
 
-	if (ImGui::Button(playButtonLabel, ImVec2(100.0f, 25.0f)))
+	if (ImGui::Button(playButtonLabel, ImVec2(windowSize.x / 4.0f, 25.0f)))
 		bPause = !bPause;
 
 	ImGui::SameLine();
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-	ImGui::PushItemWidth(150.0f);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - windowSize.x / 3.0f);
+	ImGui::PushItemWidth(windowSize.x / 3.0f);
 	ImGui::Text("Play Speed:");
 	ImGui::PopItemWidth();
 
 	const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
 
-	if (ImGui::Button("Reload Shaders", ImVec2(200.0f + ItemSpacing, 25.0f)))
+	if (ImGui::Button("Reload Shaders", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
 	{
 		buttonPress += 0x0001;
 	}
 
 	ImGui::SameLine();
-	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 150.0f);
-	ImGui::PushItemWidth(150.0f);
-	ImGui::InputFloat("playback", &playSpeed, 0.01f);
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - windowSize.x / 3.0f + 2.0f);
+	ImGui::PushItemWidth(windowSize.x / 3.0f);
+	ImGui::InputFloat("playback", &playSpeed, 0.01f, 0.0f, "%.2f");
 	ImGui::PopItemWidth();
 
 	if (!bIsFullwindow)
@@ -860,8 +873,8 @@ void ControlWindow(
 	ImGui::PushItemWidth(0.0f);
 	ImGui::Text("Default Editor:");
 	ImGui::PopItemWidth();
-	ImGui::SameLine(vWindowInfo.z - 217.0f - 8.0f);
-	ImGui::PushItemWidth(217.0f);
+	ImGui::SameLine(windowSize.x / 2.0f - 5.0f);
+	ImGui::PushItemWidth(windowSize.x / 2.0f);
 	if (ImGui::Combo("Default Editor", &item_current, editorItems, IM_ARRAYSIZE(editorItems)))
 	{
 		if (item_current == static_cast<int>(ImGuiEnum::DefaultEditor::E_OTHER))
@@ -881,6 +894,7 @@ void ControlWindow(
 
 	if (vCustomizableBuffer.size() > 0)
 	{
+		ImGui::Text("Customizable Shader Parameters:");
 		CustomizableArea(vCustomizableBuffer);
 	}
 
@@ -907,7 +921,7 @@ void ControlWindow(
 	ImGui::Text("Application:");
 	ImGui::ColorEdit3("clear color", (float*)&clearColor); // Edit 3 floats representing a color
 
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	ImGui::Text("App avg. %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 
 	ImGui::End();
@@ -967,7 +981,7 @@ void MainImageWindow(
 		ViewButtonLine(strName.c_str(), iPadding, vWindowSize, itemSpacing, buttonWidth, pos, i, pBuffer[i - 1].m_bIsActive, iHovered, scaling, 5.0f);
 	}
 
-	windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar;
+	windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
 	bTrackMouse = false;
 
@@ -1078,10 +1092,19 @@ void ResourceWindow(
 		vWindowInfo.w = size.y;
 	}
 
+	const float itemSpacing = ImGui::GetStyle().ItemSpacing.x + 6.0f;
 	ImVec2 windowSize = ImGui::GetWindowSize();
+
+	bool vertical = false;
+	if (windowSize.y <= windowSize.x)
+		vertical = true;
+
 	bool pressed = false;
 	static int iRightIdentifier = -1;
 	static const char* selected = "";
+
+	float imgButtonWidth = (windowSize.x) / 4.0f - 18.0f * scaling;
+	float imgButtonPos = itemSpacing;
 
 	// Setting the right image button resource
 	for (int i = 0; i < 4; ++i)
@@ -1103,7 +1126,15 @@ void ResourceWindow(
 
 		if (bufferType == Channels::ChannelType::E_Buffer)
 		{
-			bool pressed = ImGui::ImageButton(pBuffer[index].m_pShaderResourceView, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			bool pressed = false;
+			if(!vertical)
+				pressed = ImGui::ImageButton(pBuffer[index].m_pShaderResourceView, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			else
+			{
+				ImGui::SameLine(imgButtonPos);
+				pressed = ImGui::ImageButton(pBuffer[index].m_pShaderResourceView, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			}
+
 			if (ImGui::IsItemHovered())
 			{
 				iHovered = index + 1;
@@ -1121,15 +1152,30 @@ void ResourceWindow(
 
 			std::string strName = "";
 			BufferSwitchLookup(strName, index);
-			OverlayLabel(strName.c_str(), windowSize);
+			if (vertical)
+			{
+				ImGui::SameLine(imgButtonPos);
+				OverlayLabel(strName.c_str());
+				imgButtonPos += imgButtonWidth + itemSpacing;
+			}
+			else
+			{
+				ImGui::SameLine(12.0f);
+				OverlayLabel(strName.c_str());
+			}
 		}
-		else
-		if (bufferType == Channels::ChannelType::E_Texture)
+		else if (bufferType == Channels::ChannelType::E_Texture)
 		{
 			if (iPadding == 0)
 			{
 				// Main Image
-				pressed = ImGui::ImageButton(pResource[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				if(!vertical)
+					pressed = ImGui::ImageButton(pResource[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				else
+				{
+					ImGui::SameLine(imgButtonPos);
+					pressed = ImGui::ImageButton(pResource[i].m_pShaderResource, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				}
 				bool hov = ImGui::IsItemHovered();
 				if (hov && ImGui::IsMouseDoubleClicked(0))
 				{
@@ -1146,7 +1192,13 @@ void ResourceWindow(
 			}
 			else
 			{
-				pressed = ImGui::ImageButton(pBuffer[iPadding - 1].m_Res[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				if(!vertical)
+					pressed = ImGui::ImageButton(pBuffer[iPadding - 1].m_Res[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				else
+				{
+					ImGui::SameLine(imgButtonPos);
+					pressed = ImGui::ImageButton(pBuffer[iPadding - 1].m_Res[i].m_pShaderResource, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				}
 				bool hov = ImGui::IsItemHovered();
 				if (hov && ImGui::IsMouseDoubleClicked(0))
 				{
@@ -1167,11 +1219,29 @@ void ResourceWindow(
 
 			std::string strName = "";
 			TextureSwitchLookup(strName, i);
-			OverlayLabel(strName.c_str(), windowSize);
+			if (vertical)
+			{
+				ImGui::SameLine(imgButtonPos);
+				ImGui::SetNextWindowFocus();
+				OverlayLabel(strName.c_str());
+			}
+			else
+			{
+				ImGui::SameLine(12.0f);
+				OverlayLabel(strName.c_str());
+			}
+			imgButtonPos += imgButtonWidth + itemSpacing;
 		}
 		else
 		{
-			ImGui::ImageButton(nullptr, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			if(!vertical)
+				ImGui::ImageButton(nullptr, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			else
+			{
+				ImGui::SameLine(imgButtonPos);
+				imgButtonPos += imgButtonWidth + itemSpacing;
+				ImGui::ImageButton(nullptr, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			}
 			bool hov = ImGui::IsItemHovered();
 			if (hov && ImGui::IsMouseClicked(1))
 			{
@@ -1200,15 +1270,15 @@ void ResourceWindow(
 		{
 			if (ImGui::MenuItem("None"))
 				iChangeInput = 5;
-			if (ImGui::MenuItem("Texture"))
+			else if (ImGui::MenuItem("Texture"))
 				iChangeInput = 0;
-			if (ImGui::MenuItem("BufferA"))
+			else if (iPadding != 1 && ImGui::MenuItem("BufferA"))
 				iChangeInput = 1;
-			if (ImGui::MenuItem("BufferB"))
+			else if (iPadding != 2 && ImGui::MenuItem("BufferB"))
 				iChangeInput = 2;
-			if (ImGui::MenuItem("BufferC"))
+			else if (iPadding != 3 && ImGui::MenuItem("BufferC"))
 				iChangeInput = 3;
-			if (ImGui::MenuItem("BufferD"))
+			else if (iPadding != 4 && ImGui::MenuItem("BufferD"))
 				iChangeInput = 4;
 
 			ImGui::EndMenu();
@@ -1225,10 +1295,13 @@ void ResourceWindow(
 			if (iChangeInput == 0)
 			{
 				pChannel[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Texture;
+				pChannel[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
+				pChannel[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Repeat;
 			}
 			else if (iChangeInput == 5)
 			{
 				pChannel[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
+				pResource[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
 			}
 			else
 			{
@@ -1256,6 +1329,8 @@ void ResourceWindow(
 			if (iChangeInput == 0)
 			{
 				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Texture;
+				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
+				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Repeat;
 			}
 			else if (iChangeInput == 5)
 			{
@@ -1267,7 +1342,6 @@ void ResourceWindow(
 				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_BufferId = Channels::BufferId(iChangeInput - 1);
 				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
 				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Clamp;
-
 				if (!pBuffer[iRightIdentifier - 1].m_bIsActive)
 					pBuffer[iRightIdentifier - 1].InitBuffer(
 						pDevice, 
@@ -1318,13 +1392,18 @@ void ResourceWindow(
 
 			// Update the resource
 			std::string path = std::string("..\\..\\ShaderToyLibrary\\");
-			strcpy(pChannel[iPressIdentifier - 1].m_strTexture, fileName.c_str());
 			if (iPadding == 0)
 			{
+				strcpy(pChannel[iPressIdentifier - 1].m_strTexture, fileName.c_str());
 				path = path + std::string(strProj) + std::string("\\channels\\channels.txt");
 				WriteChannel(path.c_str(), pChannel);
 			}
-
+			else
+			{
+				strcpy(pBuffer[iPadding - 1].m_Channels[iPressIdentifier - 1].m_strTexture, fileName.c_str());
+				ChannelPathSwitchLookup(path, strProj, iPadding - 1);
+				WriteChannel(path.c_str(), pBuffer[iPadding - 1].m_Channels);
+			}
 
 			newTexture = true;
 		}

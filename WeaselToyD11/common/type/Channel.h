@@ -35,7 +35,15 @@ namespace Channels
 
 struct Channel
 {
-	Channel() {};
+	Channel() 
+	{
+		m_Type = Channels::ChannelType::E_None;
+		strcpy(m_strTexture, "");
+		m_Filter = Channels::FilterType::E_Linear;
+		m_Wrap = Channels::WrapType::E_Clamp;
+		m_BufferId = Channels::BufferId::E_BufferA;
+	};
+
 	Channel(const char path[]) { strcpy(m_strTexture, path); };
 
 	Channels::ChannelType	m_Type;

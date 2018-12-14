@@ -1,6 +1,7 @@
 #include "TextureLib.h"
 
 #include <windows.h>
+#include <pix3.h>
 #include <d3d11.h>
 #include <directxcolors.h>
 #include <vector>
@@ -192,6 +193,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 	if (hFind != INVALID_HANDLE_VALUE)
 	{
 		{
+			PIXBeginEvent(PIX_COLOR_INDEX((byte)4), "Finding Textures");
 			do
 			{
 				const char* fileName = data.cFileName;
@@ -217,6 +219,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 				}
 			} while (FindNextFile(hFind, &data));
 			FindClose(hFind);
+			PIXEndEvent(); // FINDINGTEXTURES
 		}
 	}
 
@@ -226,6 +229,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 
 	if (this->m_iLength > 0)
 	{
+		PIXBeginEvent(0, "ThreadedTextureLoading");
 		// Threaded version
 		InitializeCriticalSection(&CriticalSection);
 		InitializeConditionVariable(&BufferNotEmpty);
@@ -256,6 +260,9 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 			0,
 			&dwThreadIdArrayTexture
 		);
+
+		PIXEndEvent(); // THREADEDTEXTURELOADING
+
 	}
 
 	return hr;
@@ -273,6 +280,9 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 	for (int i = 1; i < data->textureLib->m_iLength; ++i)
 	{
 		TextureMemory tm;
+
+		// PIX Event
+		PIXBeginEvent(0, L"Thread_LoadingTextures");
 
 		const size_t cSize = strlen(data->textureLib->m_ppPath[i]) + 1;
 		wchar_t* path = new wchar_t[cSize];
@@ -296,6 +306,8 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 		LeaveCriticalSection(&CriticalSection);
 
 		WakeConditionVariable(&BufferNotEmpty);
+
+		PIXEndEvent(); // THREAD_LOADINGTEXTURES
 	}
 	
 	/*while (true)
@@ -318,6 +330,9 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 
 	while (true)
 	{
+		// PIX Event
+		PIXBeginEvent(0, L"Thread_LoadToShaderView");
+
 		// Request ownership of the critical section.
 		EnterCriticalSection(&CriticalSection);
 
@@ -354,6 +369,8 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 
 		data->textureLib->m_pIsSet[tm.id] = true;
 		counter++;
+
+		PIXEndEvent(); // THREAD_LOADTOSHADERVIEW
 
 		// Exit since we loaded all the textures
 		if (counter >= data->textureLib->m_iLength && filesLoaded.size() == 0)

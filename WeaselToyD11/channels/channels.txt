@@ -1,12 +1,2 @@
 ########## Texture Controls #############
-s 2
-
-iC textures/abstract3.dds
-t texture
-f mipmap
-w repeat
-
-iC textures/organic4.dds
-t texture
-f mipmap
-w repeat
+s 0
