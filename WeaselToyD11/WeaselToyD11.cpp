@@ -1772,13 +1772,10 @@ HRESULT LoadProject()
 	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
-		{
 			g_Buffers[i].Release(i);
 
-
-			if (g_Resource[i].m_pSampler)
-				g_Resource[i].m_pSampler->Release();
-		}
+		if (g_Resource[i].m_pSampler)
+			g_Resource[i].m_pSampler->Release();
 	}
 
 	InitResources(false);
