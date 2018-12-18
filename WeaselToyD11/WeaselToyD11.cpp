@@ -124,6 +124,7 @@ Channel						g_Channels[MAX_RESORCES];
 DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
 RECT						g_vAppSize = { 0, 0, 0, 0 };
+RECT						g_vDesktop;
 ImVec2						g_vCurrentWindowSize;
 ImVec2						g_vWindowSize;
 ImVec2						g_vPadding = ImVec2(16.0f, 65.0f);
@@ -238,31 +239,66 @@ void DefaultImGuiWindows()
 		float width = (float)(g_vAppSize.right - g_vAppSize.left);
 		float height = (float)(g_vAppSize.bottom - g_vAppSize.top);
 
+		switch (g_vDesktop.right)
+		{
+		case 3840:
+			// 4K
+			g_vControlWindow = ImVec4(
+				1.0f,
+				1.0f,
+				width * 0.18f,
+				height * 0.4f
+			);
+			g_vMainImageWindow = ImVec4(
+				5.0f + width * 0.18f,
+				height * 0.12f,
+				width * 0.67f,
+				height * 0.7f
+			);
+			g_vResourceWindow = ImVec4(
+				width * 0.85f + 10.0f,
+				height * 0.25f,
+				width * 0.14f,
+				height * 0.45f
+			);
+			g_vShaderErrorWindow = ImVec4(
+				1.0f,
+				height * 0.9f,
+				width * 0.7f,
+				height * 0.15f
+			);
+			break;
+		default:
+			// 1080p
+			g_vControlWindow = ImVec4(
+				1.0f,
+				1.0f,
+				width * 0.24f,
+				height * 0.6f
+			);
+			g_vMainImageWindow = ImVec4(
+				width * 0.24f,
+				1.0f,
+				width * 0.76f,
+				height * 0.85f
+			);
+			g_vResourceWindow = ImVec4(
+				1.0f,
+				height * 0.85f,
+				width * 0.30f,
+				height * 0.15f
+			);
+			g_vShaderErrorWindow = ImVec4(
+				width * 0.30f,
+				height * 0.85f,
+				width * 0.70f,
+				height * 0.15f
+			);
+			break;
+		}
+
 		g_bResChanged = true;
-		g_vControlWindow = ImVec4(
-			1.0f,
-			1.0f,
-			width * 0.18f,
-			height * 0.4f
-		);
-		g_vMainImageWindow = ImVec4(
-			5.0f + width * 0.18f,
-			height * 0.12f,
-			width * 0.67f,
-			height * 0.7f
-		);
-		g_vResourceWindow = ImVec4(
-			width * 0.85f + 10.0f,
-			height * 0.25f,
-			width * 0.14f,
-			height * 0.45f
-		);
-		g_vShaderErrorWindow = ImVec4(
-			1.0f,
-			height * 0.9f,
-			width * 0.7f,
-			height * 0.15f
-		);
+		
 	}
 }
 
@@ -1027,10 +1063,9 @@ void InitImGui()
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
 	const HWND hDesktop = GetDesktopWindow();
-	RECT desktop;
-	GetWindowRect(hDesktop, &desktop);
+	GetWindowRect(hDesktop, &g_vDesktop);
 
-	switch (desktop.right)
+	switch (g_vDesktop.right)
 	{
 	case 3840:
 		// 4K
@@ -1381,9 +1416,6 @@ void Render()
 				// Currently not supporting other types
 				assert(g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT || g_vCustomizableBuffer[i].type == D3D_SVT_INT);
 		}
-		else
-			// Data should be set
-			assert(g_vCustomizableBuffer[i].isDataSet);
 	}
 	g_pImmediateContext->UpdateSubresource(g_pCBCustomizable, 0, nullptr, customizableBufferData, 0, 0);
 
