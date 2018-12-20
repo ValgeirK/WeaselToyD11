@@ -6,6 +6,7 @@
 #include "../lib/imgui.h"
 
 #include "type/Channel.h"
+#include "type/HashDefines.h"
 
 bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 {
@@ -43,8 +44,15 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				
 				if (strcmp(type, "texture") == 0)
 					ch.m_Type = Channels::ChannelType::E_Texture;
-				if (strcmp(type, "buffer") == 0)
+				else if (strcmp(type, "buffer") == 0)
 					ch.m_Type = Channels::ChannelType::E_Buffer;
+				else
+				{
+					// only supporting three types suported
+					assert(strcmp(type, "texture") == 0
+						|| strcmp(type, "buffer") == 0
+						|| strcmp(type, "none") == 0);
+				}
 			}
 			case 's':
 			{
@@ -76,10 +84,17 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				
 				if(strcmp(filter, "mipmap") == 0)
 					ch.m_Filter = Channels::FilterType::E_Mipmap;
-				if (strcmp(filter, "nearest") == 0)
+				else if (strcmp(filter, "nearest") == 0)
 					ch.m_Filter = Channels::FilterType::E_Nearest;
-				if (strcmp(filter, "linear") == 0)
+				else if (strcmp(filter, "linear") == 0)
 					ch.m_Filter = Channels::FilterType::E_Linear;
+				else
+				{
+					// only supporting three filter types
+					assert(strcmp(filter, "mipmap") == 0
+						|| strcmp(filter, "nearest") == 0
+						|| strcmp(filter, "linear") == 0);
+				}
 
 				break;
 			}
@@ -92,8 +107,14 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 
 				if (strcmp(wrap, "clamp") == 0)
 					ch.m_Wrap = Channels::WrapType::E_Clamp;
-				if (strcmp(wrap, "repeat") == 0)
+				else if (strcmp(wrap, "repeat") == 0)
 					ch.m_Wrap = Channels::WrapType::E_Repeat;
+				else
+				{
+					// only supporting two wrap types
+					assert(strcmp(wrap, "clamp") == 0
+						|| strcmp(wrap, "repeat") == 0);
+				}
 
 				break;
 			}
@@ -108,17 +129,25 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				{
 					ch.m_BufferId = Channels::BufferId::E_BufferA;
 				}
-				if (strcmp(bufferId, "b") == 0)
+				else if (strcmp(bufferId, "b") == 0)
 				{
 					ch.m_BufferId = Channels::BufferId::E_BufferB;
 				}
-				if (strcmp(bufferId, "c") == 0)
+				else if (strcmp(bufferId, "c") == 0)
 				{
 					ch.m_BufferId = Channels::BufferId::E_BufferC;
 				}
-				if (strcmp(bufferId, "d") == 0)
+				else if (strcmp(bufferId, "d") == 0)
 				{
 					ch.m_BufferId = Channels::BufferId::E_BufferD;
+				}
+				else
+				{
+					// we only have 4 available buffers
+					assert(strcmp(bufferId, "a") == 0
+						|| strcmp(bufferId, "b") == 0
+						|| strcmp(bufferId, "c") == 0
+						|| strcmp(bufferId, "d") == 0);
 				}
 			}
 			default:
@@ -145,6 +174,12 @@ const char* GetType(Channels::ChannelType type)
 		return "buffer";
 	case Channels::ChannelType::E_Texture:
 		return "texture";
+	default:
+		// there are only 3 possible types
+		assert(type == Channels::ChannelType::E_None
+			|| type == Channels::ChannelType::E_Buffer
+			|| type == Channels::ChannelType::E_Texture);
+		break;
 	}
 
 	return "";
@@ -160,6 +195,12 @@ const char* GetFilter(Channels::FilterType type)
 		return "mipmap";
 	case Channels::FilterType::E_Nearest:
 		return "nearest";
+	default:
+		// there are only 3 possible filter types
+		assert(type == Channels::FilterType::E_Linear
+			|| type == Channels::FilterType::E_Mipmap
+			|| type == Channels::FilterType::E_Nearest);
+		break;
 	}
 
 	return "";
@@ -173,6 +214,11 @@ const char* GetWrap(Channels::WrapType type)
 		return "clamp";
 	case Channels::WrapType::E_Repeat:
 		return "repeat";
+	default:
+		// there are only 2 possible wrap types
+		assert(Channels::WrapType::E_Clamp
+			|| Channels::WrapType::E_Repeat);
+		break;
 	}
 
 	return "";
@@ -190,7 +236,16 @@ const char* GetBuffer(Channels::BufferId id)
 		return "c";
 	case Channels::BufferId::E_BufferD:
 		return "d";
+	default:
+		// there are only 4 different buffers
+		assert(Channels::BufferId::E_BufferA
+			|| Channels::BufferId::E_BufferB
+			|| Channels::BufferId::E_BufferC
+			|| Channels::BufferId::E_BufferD);
+		break;
 	}
+
+	return "";
 }
 
 ////////////////////////////////////////////////
@@ -207,7 +262,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 	fprintf(file, "########## Texture Controls #############\n");
 
 	int size = 0;
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (channels[i].m_strTexture[0] == 't')
 			size++;
@@ -215,7 +270,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 
 	fprintf(file, "s %i\n\n", size);
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (channels[i].m_Type >= 0)
 		{

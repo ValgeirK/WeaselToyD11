@@ -42,6 +42,7 @@ void SplitString(const std::string& inStr, std::vector<std::string>& container, 
 
 void KeepImGuiWindowsInsideApp(RECT rect, ImVec4& vWindow, bool& bResChanged)
 {
+	// Checking if x coord is outside
 	if (vWindow.x + vWindow.z > rect.right - rect.left)
 	{
 		bResChanged = true;
@@ -53,6 +54,7 @@ void KeepImGuiWindowsInsideApp(RECT rect, ImVec4& vWindow, bool& bResChanged)
 		vWindow.x = 0.0f;
 	}
 
+	// Check if y coord is outside
 	if (vWindow.y + vWindow.w > rect.bottom - rect.top)
 	{
 		bResChanged = true;

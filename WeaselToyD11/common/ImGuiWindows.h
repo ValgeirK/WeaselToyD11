@@ -79,7 +79,7 @@ void ControlWindow(
 	float, float,
 	int, int&,
 	bool&, bool&, bool&, bool,
-	bool&,
+	bool&, bool&,
 	ImVec4&,
 	ImVec4&,
 	std::vector<CustomizableBuffer>&

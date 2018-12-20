@@ -18,6 +18,7 @@
 #include "type/Resource.h"
 #include "type/Channel.h"
 #include "type/ConstantBuffer.h"
+#include "type/HashDefines.h"
 
 #include "../ImGuiFileDialog.h"
 
@@ -179,37 +180,37 @@ bool ButtonLine(const char* strName, ImVec2 vWindowSize, float fItemSpacing, flo
 
 void ViewButtonLine(const char* strName, int& iPadding, ImVec2 vWindowSize, float fItemSpacing, float& fButtonWidth, float& fPos, int index, bool active, int hovered, float scale, float fButtonCount)
 {
-	bool useColor = false;
-	ImVec4 color = ImVec4();
+	bool useColour = false;
+	ImVec4 colour = ImVec4();
 
 	if (iPadding == index)
 	{
 		// Active tab
-		useColor = true;
-		color = (ImVec4)ImColor(1.0f, 0.5f, 0.5f, 1.0f);
+		useColour = true;
+		colour = (ImVec4)ImColor(1.0f, 0.5f, 0.5f, 1.0f);
 	}
 	else
 	if (!active)
 	{
 		// Unused tabs
-		useColor = true;
-		color = (ImVec4)ImColor(0.5f, 0.5f, 0.5f, 1.0f);
+		useColour = true;
+		colour = (ImVec4)ImColor(0.5f, 0.5f, 0.5f, 1.0f);
 	}
 	else
 	if (hovered == index)
 	{
 		// Hovered tab
-		useColor = true;
-		color = (ImVec4)ImColor(0.5f, 0.8f, 0.5f, 1.0f);
+		useColour = true;
+		colour = (ImVec4)ImColor(0.5f, 0.8f, 0.5f, 1.0f);
 	}
 
-	if (useColor)
-		ImGui::PushStyleColor(ImGuiCol_Button, color);
+	if (useColour)
+		ImGui::PushStyleColor(ImGuiCol_Button, colour);
 
 	if (ButtonLine(strName, vWindowSize, fItemSpacing, fButtonWidth, fPos, scale, fButtonCount))
 		iPadding = index;
 
-	if(useColor)
+	if(useColour)
 		ImGui::PopStyleColor();
 }
 
@@ -688,7 +689,7 @@ void CustomizableArea(
 void ControlWindow(
 	ID3D11Texture2D* pRenderTargetTexture,
 	Resource* pResource,
-	ImVec4& clearColor,
+	ImVec4& clearColour,
 	Buffer* pBuffer,
 	TextureLib* pTextureLib,
 	ImGuiEnum::DefaultEditor& defaultEditor,
@@ -702,7 +703,7 @@ void ControlWindow(
 	int iFrame, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
 	bool& bDefaultEditorSet, bool bIsFullwindow,
-	bool& bGoFullscreenChange,
+	bool& bGoFullscreenChange, bool& bVsync,
 	ImVec4& vWindowInfo,
 	ImVec4& vMainWindowInfo,
 	std::vector<CustomizableBuffer>& vCustomizableBuffer
@@ -731,7 +732,7 @@ void ControlWindow(
 	float pos = 0.0f;
 	float buttonWidth = 150.0f;
 	
-	std::string basePath = std::string("..\\..\\ShaderToyLibrary\\");
+	std::string basePath = std::string(PROJECT_PATH_DOUBLE_SLASH);
 	std::string newPath = basePath + std::string(strProj.c_str());
 
 	static bool copyClicked = false;
@@ -801,7 +802,7 @@ void ControlWindow(
 		ImGui::End();
 	}
 
-	std::string defProjPath = "../../ShaderToyLibrary";
+	std::string defProjPath = PROJECT_PATH;
 	if (loadClicked)
 	{
 		if (ImGuiFileDialog::Instance(pTextureLib)->FileDialog("Choose File", "d", defProjPath.c_str(), ""))
@@ -894,7 +895,7 @@ void ControlWindow(
 
 	if (vCustomizableBuffer.size() > 0)
 	{
-		ImGui::Text("Customizable Shader Parameters:");
+		ImGui::Text("Customisable Shader Parameters:");
 		CustomizableArea(vCustomizableBuffer);
 	}
 
@@ -919,7 +920,8 @@ void ControlWindow(
 	ImGui::Separator();
 	ImGui::Separator();
 	ImGui::Text("Application:");
-	ImGui::ColorEdit3("clear color", (float*)&clearColor); // Edit 3 floats representing a color
+	ImGui::Checkbox("VSync", &bVsync);
+	ImGui::ColorEdit3("clear colour", (float*)&clearColour); // Edit 3 floats representing a color
 
 	ImGui::Text("App avg. %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
@@ -1040,7 +1042,7 @@ void MainImageWindow(
 	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor(1.0f, 1.0f, 1.0f, 0.0f));
 	ImGui::SetCursorScreenPos(ImVec2(position.x + 10.0f, position.y + vCurrentWindowSize.y - 30.0f));
 
-	std::string path = std::string("..\\..\\ShaderToyLibrary\\");
+	std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
 	if (ImGui::Button(shaderName))
 	{
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_DEFAULT)
@@ -1261,6 +1263,7 @@ void ResourceWindow(
 			if (ImGui::Selectable("Open in explorer..."))
 			{
 				std::string highlighted = std::string(selected);
+				highlighted = ".\\" + highlighted;
 				std::replace(highlighted.begin(), highlighted.end(), '/', '\\');
 				std::string cmd = std::string("explorer.exe /select," + highlighted);
 				system(cmd.c_str());
@@ -1280,6 +1283,11 @@ void ResourceWindow(
 				iChangeInput = 3;
 			else if (iPadding != 4 && ImGui::MenuItem("BufferD"))
 				iChangeInput = 4;
+			else
+			{
+				// The padding shouldn't go higher than 5
+				assert(iPadding < 5);
+			}
 
 			ImGui::EndMenu();
 		}
@@ -1288,7 +1296,7 @@ void ResourceWindow(
 
 	if (iChangeInput >= 0)
 	{
-		std::string path = std::string("..\\..\\ShaderToyLibrary\\");
+		std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
 
 		if (iPadding == 0)
 		{
@@ -1391,7 +1399,7 @@ void ResourceWindow(
 			}
 
 			// Update the resource
-			std::string path = std::string("..\\..\\ShaderToyLibrary\\");
+			std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
 			if (iPadding == 0)
 			{
 				strcpy(pChannel[iPressIdentifier - 1].m_strTexture, fileName.c_str());

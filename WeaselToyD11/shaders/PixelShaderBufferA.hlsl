@@ -16,8 +16,11 @@ float4 main(PS_INPUT input) : SV_Target
 	// Normalized pixel coordinates (from 0 to 1)
     vec2 uv = fragCoord/iResolution.xy;
 
-    // Time varying pixel color
-    vec3 col = 0.5 + 0.5*cos(iTime+uv.xyx);
+    vec3 tex1 = tx4.Sample(iChannel4, uv).xyz;
+    vec3 tex2 = tx6.Sample(iChannel6, uv).xyz;
 
-	return vec4(col, 1.0);
+    // Time varying pixel color
+    vec3 col = (tex1 + tex2) / 2;
+
+    return vec4(col, 1.0);
 }

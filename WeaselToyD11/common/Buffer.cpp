@@ -12,6 +12,7 @@
 #include "TextureLib.h"
 #include "type/Channel.h"
 #include "type/ConstantBuffer.h"
+#include "type/HashDefines.h"
 
 HRESULT Buffer::InitBuffer(
 	ID3D11Device*        pd3dDevice,
@@ -30,7 +31,7 @@ HRESULT Buffer::InitBuffer(
 	int padding = 0;
 
 	// Reading in Channel file for this channel
-	std::string projChannelPath = "../../ShaderToyLibrary/" + std::string(strProj);
+	std::string projChannelPath = PROJECT_PATH + std::string(strProj);
 	// Make room for characters
 	std::wstring projPixelPathW(projChannelPath.length(), L' ');
 	 // Copy string to wstring.
@@ -95,7 +96,7 @@ HRESULT Buffer::InitBuffer(
 		return S_FALSE;
 
 	// Load texture
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		int iBufferIndex = static_cast<int>(index);
 		if (m_Channels[i].m_Type == Channels::ChannelType::E_Texture)
@@ -107,7 +108,7 @@ HRESULT Buffer::InitBuffer(
 			pTextureLib->GetTexture(m_Channels[i].m_strTexture, &m_Res[i].m_pShaderResource, m_Res[i].m_vChannelRes);
 
 			// Texture
-			pImmediateContext->PSSetShaderResources(i + padding * 4, 1, &m_Res[i].m_pShaderResource);
+			pImmediateContext->PSSetShaderResources(i + padding * MAX_RESORCES, 1, &m_Res[i].m_pShaderResource);
 		}
 		else if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
@@ -130,8 +131,11 @@ HRESULT Buffer::InitBuffer(
 			m_Res[i].m_pShaderResource = nullptr;
 		}
 
-		// Create Sampler for buffer
-		CreateSampler(pd3dDevice, pImmediateContext, &m_pSampler[i], m_Channels[i], iBufferIndex, i);
+		if (m_Channels[i].m_Type != Channels::ChannelType::E_None)
+	    {
+			// Create Sampler for buffer
+			CreateSampler(pd3dDevice, pImmediateContext, &m_pSampler[i], m_Channels[i], iBufferIndex, i);
+	    }
 	}
 
 	m_bIsActive = true;
@@ -155,7 +159,7 @@ void Buffer::ResizeTexture(ID3D11Device* device, ID3D11DeviceContext* context, c
 		Create2DTexture(device, &m_pRenderTargetTextureCopy, nullptr, &m_pShaderResourceViewCopy, width, height);
 	}
 
-	for(int i = 0; i < 4; ++i)
+	for(int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
@@ -165,12 +169,17 @@ void Buffer::ResizeTexture(ID3D11Device* device, ID3D11DeviceContext* context, c
 	}
 }
 
+void Buffer::ReloadTexture(TextureLib* pTextureLib, int idx)
+{
+	pTextureLib->GetTexture(m_Channels[idx].m_strTexture, &m_Res[idx].m_pShaderResource, m_Res[idx].m_vChannelRes);
+}
+
 HRESULT Buffer::ReloadShader(ID3D11Device* pd3dDevice, ID3D11VertexShader*  pVertShader, const char* strProj, const int index)
 {
 	HRESULT hr = S_OK;
 
 	// Reading in Channel file for this channel
-	std::string channelPath = "../../ShaderToyLibrary/" + std::string(strProj);
+	std::string channelPath = PROJECT_PATH + std::string(strProj);
 	// Make room for characters
 	std::wstring pixelShaderPath(channelPath.length(), L' ');
 	// Copy string to wstring.
@@ -237,7 +246,7 @@ void Buffer::SetShaderResource(ID3D11DeviceContext* pImmediateContext, const int
 void Buffer::ClearShaderResource(ID3D11DeviceContext* pImmediateContext, ID3D11DepthStencilView* pDepthStencilView)
 {
 	ID3D11ShaderResourceView* renderNull = nullptr;
-	for(int i = 0; i < 4; ++i)
+	for(int i = 0; i < MAX_RESORCES; ++i)
 		pImmediateContext->PSSetShaderResources(i, 1, &renderNull);
 	
 	ID3D11RenderTargetView* viewNull = nullptr;
@@ -274,19 +283,23 @@ void Buffer::Render(
 	case 3:
 		padding = 4;
 		break;
+	default:
+		// Index should only be in the range 0 to 3
+		assert(0);
+		break;
 	}
 
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
 			pImmediateContext->CopyResource(m_pRenderTargetTextureCopy, m_pRenderTargetTexture);
-			pImmediateContext->PSSetShaderResources(i + (index + 1)* 4, 1, &m_pShaderResourceViewCopy);
+			pImmediateContext->PSSetShaderResources(i + (index + 1)* MAX_RESORCES, 1, &m_pShaderResourceViewCopy);
 		}
 		else
 		{
-			pImmediateContext->PSSetShaderResources(i + padding * 4, 1, &m_Res[i].m_pShaderResource);
+			pImmediateContext->PSSetShaderResources(i + padding * MAX_RESORCES, 1, &m_Res[i].m_pShaderResource);
 		}
 	}
 
@@ -326,54 +339,74 @@ void Buffer::Release(int index)
 
 	for (int i = 0; i < m_iSize; ++i)
 	{
-		if (m_pSampler[i])
+		if (m_Res[i].m_Type != Channels::ChannelType::E_None && m_pSampler[i])
 			refs = m_pSampler[i]->Release();
 		else
 			refs = 0;
 
 		if (refs > 0)
+		{
 			_RPTF2(_CRT_WARN, "Buffer Sampler %i still has %i references.\n", i, refs);
+		}
 	}
 
 	if (m_pRenderTargetTextureCopy)
 		refs = m_pRenderTargetTextureCopy->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer RenderTargetTextureCopy still has %i references.\n", refs);
+	}
 
 	if (m_pShaderResourceViewCopy)
 		refs = m_pShaderResourceViewCopy->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer ShaderResourceViewCopy still has %i references.\n", refs);
+	}
 	
 	if (m_pPixelShader)
 		refs = m_pPixelShader->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer PixelShader still has %i references.\n", refs);
+	}
 
 	if (m_pRenderTargetTexture)
 		refs = m_pRenderTargetTexture->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer RenderTargetTexture still has %i references.\n", refs);
+	}
 
 	if (m_pRenderTargetView)
 		refs = m_pRenderTargetView->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer RenderTargetView still has %i references.\n", refs);
+	}
 
 	if (m_pShaderResourceView)
 		refs = m_pShaderResourceView->Release();
 	else
 		refs = 0;
+
 	if (refs > 0)
+	{
 		_RPTF2(_CRT_WARN, "Buffer ShaderResourceView still has %i references.\n", refs);
+	}
 }

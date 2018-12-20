@@ -1,2 +1,27 @@
 ########## Texture Controls #############
-s 0
+s 4
+
+iC textures/default.dds
+t buffer
+f linear
+w clamp
+b a
+
+iC textures/weaseltron.dds
+t texture
+f linear
+w repeat
+b a
+
+iC textures/default.dds
+t none
+f linear
+w clamp
+b a
+
+iC textures/default.dds
+t none
+f linear
+w clamp
+b a
+

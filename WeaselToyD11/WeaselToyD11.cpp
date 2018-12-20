@@ -136,7 +136,7 @@ float						g_fPauseT = 0;
 float						g_fDPIscale = 1.0f;
 int						    g_iFrame = 0;
 bool			            g_bPause = false;
-ImVec4						g_vClearColor = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
+ImVec4						g_vClearColour = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
 int							g_iPressIdentifier = 0;
 int							g_iPadding = 0;
 bool					    g_bTrackMouse = false;
@@ -148,10 +148,11 @@ bool						g_bAlt = false;
 bool						g_bAutoReload = false;
 bool						g_bNewProjLoad = false;
 bool						g_bDefaultEditorSelected = false;
+bool						g_bVsync = true;
 float						g_fPlaySpeed = 1.0f;
 time_t						g_tTimeCreated;
 std::vector<std::string>	g_vShaderErrorList;
-std::string					g_strProject = "NewProject";
+std::string					g_strProject = DEFAULT_PROJECT_NAME;
 std::string					g_strDefaultEditor = "";
 
 ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
@@ -193,20 +194,29 @@ void				ImGuiRender();
 void Initialize()
 {
 	int enumEditor = 1;
-	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColor, g_vAppSize, enumEditor, g_bAutoReload);
+	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColour, g_vAppSize, enumEditor, g_bAutoReload);
 	g_eDefaultEditor = static_cast<ImGuiEnum::DefaultEditor>(enumEditor);
 
-	const char* pathToCheck = "../../ShaderToyLibrary/";
+	const char* pathToCheck = PROJECT_PATH;
 	DWORD dwAttrib = GetFileAttributes(pathToCheck);
 
 	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
 	{
 		// If this folder doesn't exist then we create it and create a new project 
-		const char* pathToCreate = "..\\..\\ShaderToyLibrary\\NewProject";
+		std::string pathToCreate = PROJECT_PATH_DOUBLE_SLASH + std::string(DEFAULT_PROJECT_NAME);
 		system((std::string("md ") + pathToCreate + std::string("\\channels")).c_str());
 		system((std::string("md ") + pathToCreate + std::string("\\shaders")).c_str());
 		system((std::string("xcopy ") + std::string(".\\channels ") + pathToCreate + std::string("\\channels") + std::string(" /i /E")).c_str());
 		system((std::string("xcopy ") + std::string(".\\shaders ") + pathToCreate + std::string("\\shaders") + std::string(" /i /E")).c_str());
+	}
+
+	std::string projectPathToCheck = PROJECT_PATH + std::string(g_strProject);
+	dwAttrib = GetFileAttributes(projectPathToCheck.c_str());
+
+	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
+	{
+		// If this project doesn't exist then we fall back to the default one
+		g_strProject = DEFAULT_PROJECT_NAME;
 	}
 
 	if (g_strDefaultEditor != "" || exists == 1)
@@ -231,6 +241,9 @@ void DefaultImGuiWindows()
 	const char* fileToCheck = "imgui.ini";
 	DWORD dwAttrib = GetFileAttributes(fileToCheck);
 
+	const HWND hDesktop = GetDesktopWindow();
+	GetWindowRect(hDesktop, &g_vDesktop);
+
 	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
 	{
 		// if the imgui.ini file doesn't exist then the imgui windows will
@@ -247,7 +260,7 @@ void DefaultImGuiWindows()
 				1.0f,
 				1.0f,
 				width * 0.18f,
-				height * 0.4f
+				height * 0.45f
 			);
 			g_vMainImageWindow = ImVec4(
 				5.0f + width * 0.18f,
@@ -274,7 +287,7 @@ void DefaultImGuiWindows()
 				1.0f,
 				1.0f,
 				width * 0.24f,
-				height * 0.6f
+				height * 0.65f
 			);
 			g_vMainImageWindow = ImVec4(
 				width * 0.24f,
@@ -388,9 +401,11 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				{
 					//D3D_VERIFY(g_pSwapChain->Present(1, 0));
 					HRESULT hr = S_OK;
-					hr = g_pSwapChain->Present(1, 0);
-					if(hr != S_OK)
+					hr = g_pSwapChain->Present(g_bVsync, 0);
+					if (hr != S_OK)
+					{
 						_RPTF2(_CRT_WARN, "Present error %i.\n", ((hr) & 0x0000FFFF));
+					}
 				}
 				PIXEndEvent(); // PRESENT
 			}
@@ -943,7 +958,7 @@ HRESULT InitDevice()
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
@@ -1062,9 +1077,6 @@ void InitImGui()
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-	const HWND hDesktop = GetDesktopWindow();
-	GetWindowRect(hDesktop, &g_vDesktop);
-
 	switch (g_vDesktop.right)
 	{
 	case 3840:
@@ -1105,7 +1117,7 @@ HRESULT InitResources(bool bLoadTextures)
 		g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
 	}
 
-	if (!LoadChannels((std::string("../../ShaderToyLibrary/") + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
+	if (!LoadChannels((std::string(PROJECT_PATH) + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
 		return S_FALSE;
 
 	for (int i = 0; i < MAX_RESORCES; ++i)
@@ -1235,7 +1247,7 @@ void AutoReload()
 
 	struct _stat result;
 
-	std::string path = std::string("../../ShaderToyLibrary/") + g_strProject;
+	std::string path = std::string(PROJECT_PATH) + g_strProject;
 
 	for (int i = 0; i < MAX_RESORCES + 1; ++i)
 	{
@@ -1279,6 +1291,8 @@ void Render()
 				// Texture
 				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
 			}
+
+			g_Buffers->ReloadTexture(g_pTexturelib, i);
 		}
 
 		g_pTexturelib->m_bReload = false;
@@ -1413,8 +1427,10 @@ void Render()
 					((int*)customizableBufferData)[g_vCustomizableBuffer[i].offset / SIZE_OF_INT + j] = ((int*)g_vCustomizableBuffer[i].data)[j];
 			}
 			else
+			{
 				// Currently not supporting other types
 				assert(g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT || g_vCustomizableBuffer[i].type == D3D_SVT_INT);
+			}
 		}
 	}
 	g_pImmediateContext->UpdateSubresource(g_pCBCustomizable, 0, nullptr, customizableBufferData, 0, 0);
@@ -1441,7 +1457,7 @@ void ImGuiRender()
 	// Rendering
 	ImGui::Render();
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
-	g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, (float*)&g_vClearColor);
+	g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, (float*)&g_vClearColour);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
@@ -1453,7 +1469,7 @@ void CleanupDevice()
 {
 	// Save Imgui state
 	ImGui::SaveIniSettingsToDisk("imgui.ini");
-	WriteIni(g_strProject.c_str(), g_strDefaultEditor.c_str(), g_vClearColor, g_vAppSize, static_cast<int>(g_eDefaultEditor), g_bAutoReload);
+	WriteIni(g_strProject.c_str(), g_strDefaultEditor.c_str(), g_vClearColour, g_vAppSize, static_cast<int>(g_eDefaultEditor), g_bAutoReload);
 	ULONG refs = 0;
 	// revert fullscreen before closing
 	g_pSwapChain->SetFullscreenState(FALSE, NULL);
@@ -1472,7 +1488,9 @@ void CleanupDevice()
 		else
 			refs = 0;
 		if (refs > 0)
+		{
 			_RPTF2(_CRT_WARN, "Main Sampler %i still has %i references.\n", i, refs);
+		}
 	}
 
 	g_pTexturelib->Release();
@@ -1528,6 +1546,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 	bool bGoFullChange = false;
 
+	// We don't want the ImGui windows to go outside the app window
 	KeepImGuiWindowsInsideApp(g_vAppSize, g_vControlWindow, g_bResChanged);
 
 	// Controls Window
@@ -1535,7 +1554,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 	ControlWindow(
 		g_pRenderTargetTexture,
 		g_Resource,
-		g_vClearColor,
+		g_vClearColour,
 		g_Buffers,
 		g_pTexturelib,
 		g_eDefaultEditor,
@@ -1552,6 +1571,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_bDefaultEditorSelected,
 		g_bFullWindow,
 		bGoFullChange,
+		g_bVsync,
 		g_vControlWindow,
 		g_vMainImageWindow,
 		g_vCustomizableBuffer
@@ -1559,6 +1579,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 	if (bGoFullChange)
 	{
+		// Changing between fullscreen and windowed
 		if (!g_bFullWindow)
 			GoFullscreen();
 		else
@@ -1570,6 +1591,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 
 	int iHovered = -1;
 
+	// We don't want the ImGui windows to go outside the app window
 	KeepImGuiWindowsInsideApp(g_vAppSize, g_vResourceWindow, g_bResChanged);
 
 	// Box for the resources
@@ -1605,6 +1627,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		}
 	}
 
+	// We don't want the ImGui windows to go outside the app window
 	KeepImGuiWindowsInsideApp(g_vAppSize, g_vMainImageWindow, g_bResChanged);
 
 	MainImageWindow(
@@ -1623,6 +1646,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_bTrackMouse, g_bFullscreen,
 		g_bResChanged, g_vMainImageWindow);
 
+	// We don't want the ImGui windows to go outside the app window
 	KeepImGuiWindowsInsideApp(g_vAppSize, g_vShaderErrorWindow, g_bResChanged);
 
 	// Shader Compiler Errors
@@ -1670,7 +1694,7 @@ void ReloadShaders()
 	// Copy string to wstring.
 	std::copy(g_strProject.begin(), g_strProject.end(), wStrProj.begin());
 
-	std::wstring path = std::wstring(L"../../ShaderToyLibrary/") + wStrProj;
+	std::wstring path = std::wstring(PROJECT_PATH_W) + wStrProj;
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
@@ -1747,7 +1771,7 @@ HRESULT LoadProject()
 	// Load new pixel shader
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(L"../../ShaderToyLibrary/") + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)

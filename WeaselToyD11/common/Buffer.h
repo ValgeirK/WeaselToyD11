@@ -23,6 +23,7 @@ public:
 	void							SetShaderResource(ID3D11DeviceContext*, const int);
 	void							ClearShaderResource(ID3D11DeviceContext*, ID3D11DepthStencilView*);
 	void							ResizeTexture(ID3D11Device*, ID3D11DeviceContext*, const UINT, const UINT);
+	void							ReloadTexture(TextureLib*, int);
 	void							Release(int);
 
 	bool							m_bIsActive = false;

@@ -132,7 +132,10 @@ void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** s
 			if (m_pIsSet[i])
 				*shaderRes = m_pShaderResource[i];
 			else
+			{
 				*shaderRes = m_pShaderResource[0];
+				this->m_bReload = true;
+			}
 			return;
 		}
 	}
@@ -158,6 +161,7 @@ void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** s
 			{
 				channelRes = m_pResolution[0];
 				*shaderRes = m_pShaderResource[0];
+				this->m_bReload = true;
 			}
 			return;
 		}

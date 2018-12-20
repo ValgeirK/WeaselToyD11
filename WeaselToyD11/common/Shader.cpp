@@ -9,6 +9,7 @@
 
 #include "HelperFunction.h"
 #include "type/ConstantBuffer.h"
+#include "type/HashDefines.h"
 
 HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob** ppBlobOut, std::vector<std::string>& errorList)
 {
@@ -40,7 +41,7 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
 			pErrorBlob->Release();
 		}
 
-		D3DCompileFromFile(L"shaders/PixelShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, szEntryPoint, szShaderModel,
+		D3DCompileFromFile(L"shaders/DefaultPixelShader.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, szEntryPoint, szShaderModel,
 			dwShaderFlags, 0, ppBlobOut, &pErrorBlob);
 
 		return hr;
@@ -53,7 +54,7 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
 HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableBuffer>& vCustomizableBuffer)
 {
 	// Open file
-	std::string path = std::string("../../ShaderToyLibrary/") + strProj + std::string("/shaders/PixelShader.hlsl");
+	std::string path = std::string(PROJECT_PATH) + strProj + std::string("/shaders/PixelShader.hlsl");
 	std::ifstream inputFile(path.c_str(), std::ios::in);
 
 	// Make sure the file was opened
@@ -75,12 +76,12 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 	{
 		// Finding the line where the constant buffer is set
 		sscanf(line, "%s %s\n", &dummy, &bufferName);
-	} while (inputFile.getline(line, MAX_PATH) && strcmp(bufferName, "cbCustomizable") != 0);
+	} while (inputFile.getline(line, MAX_PATH) && strcmp(bufferName, "cbCustomisable") != 0);
 
 	// Skipping the line with the curly brackets
 	inputFile.getline(line, MAX_PATH);
 
-	if (strcmp(bufferName, "cbCustomizable") != 0)
+	if (strcmp(bufferName, "cbCustomisable") != 0)
 		return S_OK;
 
 	do
@@ -161,7 +162,7 @@ void ShaderReflectionAndPopulation(
 		D3D11_SHADER_BUFFER_DESC bufferDesc;
 		pConstantBuffer->GetDesc(&bufferDesc);
 
-		if (strcmp(bufferDesc.Name, "cbCustomizable") == 0)
+		if (strcmp(bufferDesc.Name, "cbCustomisable") == 0)
 		{
 			for (unsigned int iVariables = 0; iVariables < bufferDesc.Variables; ++iVariables)
 			{
@@ -189,7 +190,7 @@ void ShaderReflectionAndPopulation(
 
 						for (int j = 0; j < vCustomizableBufferCopy.size(); ++j)
 						{
-							if (strcmp(vCustomizableBufferCopy[j].strVariable, varDesc.Name) == 0)
+							if (strcmp(vCustomizableBufferCopy[j].strVariable, vCustomizableBuffer[i].strVariable) == 0 && vCustomizableBuffer[i].isDataSet)
 							{
 								// we want to keep the values that have possibly been altered
 								vCustomizableBufferCopy[j].isDataSet = true;
@@ -223,6 +224,11 @@ void ShaderReflectionAndPopulation(
 									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
 							}
 						}
+						else
+						{
+							// Currently only supporting floats and ints
+							assert(typeDesc.Type == D3D_SVT_FLOAT || typeDesc.Type == D3D_SVT_INT);
+						}
 
 						vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
 						vCustomizableBuffer[iVariables].size = varDesc.Size;
@@ -250,7 +256,10 @@ void ShaderReflectionAndPopulation(
 						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 						{
 							cb.step = 0.1f;
-							((float*)cb.data)[i] = ((float*)varDesc.DefaultValue)[i];
+							if((float*)varDesc.DefaultValue == nullptr)
+								((float*)cb.data)[i] = 1.0f;
+							else
+								((float*)cb.data)[i] = ((float*)varDesc.DefaultValue)[i];
 						}
 					}
 					else if (typeDesc.Type == D3D_SVT_INT)
@@ -261,7 +270,10 @@ void ShaderReflectionAndPopulation(
 						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 						{
 							cb.step = 1.0f;
-							((int*)cb.data)[i] = ((int*)varDesc.DefaultValue)[i];
+							if((int*)varDesc.DefaultValue == nullptr)
+								((int*)cb.data)[i] = 1;
+							else
+								((int*)cb.data)[i] = ((int*)varDesc.DefaultValue)[i];
 						}
 					}
 					cb.type = static_cast<int>(typeDesc.Type);
