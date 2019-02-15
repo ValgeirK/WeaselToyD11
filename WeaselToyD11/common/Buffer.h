@@ -18,7 +18,7 @@ public:
 	Buffer() : m_bIsActive(false) {};
 
 	HRESULT							InitBuffer(ID3D11Device*, ID3D11DeviceContext*, ID3D11VertexShader*, TextureLib*, Buffer*, const char*, const int, const int, Channels::BufferId);
-	void							Render(ID3D11DeviceContext*, ID3D11DepthStencilView*, ID3D11Buffer*, const UINT, const UINT, const UINT, const int);
+	void							Render(Buffer*,ID3D11DeviceContext*, ID3D11DepthStencilView*, ID3D11Buffer*, const UINT, const UINT, const UINT, const int);
 	HRESULT							ReloadShader(ID3D11Device*, ID3D11VertexShader*, const char*, const int);
 	void							SetShaderResource(ID3D11DeviceContext*, const int);
 	void							ClearShaderResource(ID3D11DeviceContext*, ID3D11DepthStencilView*);
@@ -53,9 +53,6 @@ public:
 
 	ID3D11Texture2D*				m_pRenderTargetTexture = nullptr;
 	ID3D11RenderTargetView*			m_pRenderTargetView = nullptr;
-
-	ID3D11Texture2D*				m_pRenderTargetTextureCopy = nullptr;
-	ID3D11ShaderResourceView*		m_pShaderResourceViewCopy = nullptr;
 
 	bool							m_bResizeBuffer = false;
 };

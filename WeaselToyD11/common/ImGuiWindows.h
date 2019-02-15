@@ -67,6 +67,7 @@ void ControlWindow(
 	ID3D11Texture2D*,
 	Resource*,
 	ImVec4&,
+	ImVec4&,
 	Buffer*,
 	TextureLib*,
 	ImGuiEnum::DefaultEditor&,
@@ -89,6 +90,7 @@ void MainImageWindow(
 	ID3D11ShaderResourceView*,   
 	Resource*,
 	Buffer*,
+	ImVec2&,
 	ImVec2&,
 	ImVec2&,
 	ImVec2,
@@ -134,3 +136,5 @@ void ShaderErrorWindow(
 void DefaultEditorSelector(ImVec2, ImGuiEnum::DefaultEditor&, std::string&, bool&);
 
 void Barrier(ImVec2);
+
+float GetImGuiDeltaTime();

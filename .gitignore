@@ -13,5 +13,6 @@ x64
 /WeaselToyD11/settings.ini
 /Release
 
-imgui.ini
-settings.ini
+/WeaselToyD11/imgui.ini
+/WeaselToyD11/settings.ini
+/WeaselToyD11/ShaderToyLibrary/NewProject

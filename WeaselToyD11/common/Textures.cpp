@@ -31,7 +31,7 @@ HRESULT LoadTexture(
 
 	uint32_t width = 0, height = 0;
 	hr = DirectX::GetTextureInformation(path, width, height);
-	delete path;
+	delete[] path;
 	if (FAILED(hr))
 		return hr;
 

@@ -5,9 +5,14 @@
 #include <directxcolors.h>
 #include <vector>
 
+struct LoadData;
+
 struct TextureLib
 {
 	TextureLib();
+	~TextureLib();
+
+	void LoadTexturesSingleThread(ID3D11Device*);
 
 	void Release();
 	void Add(const char*);
@@ -25,4 +30,6 @@ struct TextureLib
 	int							m_iLength;
 	int							m_iCapacity;
 	bool						m_bReload = false;
+
+	LoadData*					m_pLoadData = nullptr;
 };

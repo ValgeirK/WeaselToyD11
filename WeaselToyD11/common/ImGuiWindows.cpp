@@ -15,6 +15,7 @@
 #include "Loader.h"
 #include "Textures.h"
 #include "HelperFunction.h"
+#include "RegisterHelper.h"
 #include "type/Resource.h"
 #include "type/Channel.h"
 #include "type/ConstantBuffer.h"
@@ -690,6 +691,7 @@ void ControlWindow(
 	ID3D11Texture2D* pRenderTargetTexture,
 	Resource* pResource,
 	ImVec4& clearColour,
+	ImVec4& clearColourFade,
 	Buffer* pBuffer,
 	TextureLib* pTextureLib,
 	ImGuiEnum::DefaultEditor& defaultEditor,
@@ -784,13 +786,15 @@ void ControlWindow(
 		ImGui::Begin("New..");
 		static char newStrProj[20] = "";
 		ImGui::InputText("Project name", newStrProj, 20);
-		strProj = std::string(newStrProj);
 
 		ImGui::Separator();
 		if (ButtonLine("Cancel", windowSize, itemSpacing, buttonWidth, pos, fScaling, 2.0f))
 			newClicked = false;
 		if (ButtonLine("New", windowSize, itemSpacing, buttonWidth, pos, fScaling, 2.0f))
 		{
+			strProj = std::string(newStrProj);
+			newPath = basePath + std::string(newStrProj);
+
 			// Create new directory for new project, with simple shader present
 			system((std::string("md ") + newPath + std::string("\\channels")).c_str());
 			system((std::string("md ") + newPath + std::string("\\shaders")).c_str());
@@ -840,6 +844,12 @@ void ControlWindow(
 	ImGui::PopItemWidth();
 
 	const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+	if (ImGui::Button("Restart", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
+	{
+		fGameT = 0.0f;
+		buttonPress += 0x0001;
+	}
 
 	if (ImGui::Button("Reload Shaders", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
 	{
@@ -921,10 +931,10 @@ void ControlWindow(
 	ImGui::Separator();
 	ImGui::Text("Application:");
 	ImGui::Checkbox("VSync", &bVsync);
-	ImGui::ColorEdit3("clear colour", (float*)&clearColour); // Edit 3 floats representing a color
+	if (ImGui::ColorEdit3("clear colour", (float*)&clearColour))
+		clearColourFade = clearColour;
 
 	ImGui::Text("App avg. %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-
 
 	ImGui::End();
 }
@@ -935,6 +945,7 @@ void MainImageWindow(
 	Buffer* pBuffer,
 	ImVec2& vWindowSize,
 	ImVec2& vCurrentWindowSize,
+	ImVec2& vMouse,
 	ImVec2  vPadding,
 	ImGuiWindowFlags& windowFlags,
 	const char* strProj,
@@ -988,7 +999,14 @@ void MainImageWindow(
 	bTrackMouse = false;
 
 	if (ImGui::IsWindowHovered())
+	{
 		bTrackMouse = true;
+
+		ImVec2 winPos = ImGui::GetWindowPos();
+		ImVec2 imgPos = ImGui::GetCursorPos();
+		vMouse.x = winPos.x + imgPos.x;
+		vMouse.y = winPos.y + imgPos.y;
+	}
 
 	bool bMoveHover = false;
 
@@ -1109,7 +1127,7 @@ void ResourceWindow(
 	float imgButtonPos = itemSpacing;
 
 	// Setting the right image button resource
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		int index = 0;
 		Channels::ChannelType bufferType = Channels::ChannelType::E_None;
@@ -1534,7 +1552,20 @@ void DefaultEditorSelector(ImVec2 pos, ImGuiEnum::DefaultEditor& defaultEditor, 
 			defaultEditor = ImGuiEnum::DefaultEditor::E_OTHER;
 		}
 		else
-			defaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
+		{
+			std::wstring strKeyDefaultValue;
+			GetStringRegKey(
+				static_cast<int>(ImGuiEnum::DefaultEditor::E_NOTEPADPP),
+				L"",
+				strKeyDefaultValue,
+				L"bad"
+			);
+
+			if (strKeyDefaultValue.length() > 0)
+				defaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPADPP;
+			else
+				defaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
+		}
 	}
 	ImGui::PopItemWidth();
 
@@ -1561,4 +1592,9 @@ void Barrier(ImVec2 size)
 	ImGui::SetWindowSize(size);
 
 	ImGui::End();
+}
+
+float GetImGuiDeltaTime()
+{
+	return ImGui::GetIO().DeltaTime;
 }

@@ -26,15 +26,15 @@ cbuffer cbCustomisable : register (b2)
 float4 main(PS_INPUT input) : SV_Target
 {
 	// Normalized pixel coordinates (from 0 to 1)
-    vec2 uv = fragCoord/iResolution.xy;
+    float2 uv = fragCoord/iResolution.xy;
 	
-	vec3 col = (0, 0, 0);
+	float3 col = (0, 0, 0);
 	
 	float weaselTime = 2.0;
 		
 	if(iTime > weaselTime)
 	{    
-        vec3 tex1 = tx0.Sample(iChannel0, uv).xyz;
+        float3 tex1 = tx0.Sample(iChannel0, uv).xyz;
 
         // Time varying pixel colour
         col = colour + density*cos(def*iTime+uv.xyx);
@@ -44,9 +44,9 @@ float4 main(PS_INPUT input) : SV_Target
 	else
 	{	
 		uv.y *= -1;
-	    vec3 tex1 = tx1.Sample(iChannel1, uv).xyz;
+	    float3 tex1 = tx1.Sample(iChannel1, uv).xyz;
 		col = tex1 * (weaselTime - iTime);
 	}
 	
-	return vec4(col, 1.0); 
+	return float4(col, 1.0); 
 }

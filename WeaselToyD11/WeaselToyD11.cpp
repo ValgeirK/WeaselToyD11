@@ -137,9 +137,11 @@ float						g_fDPIscale = 1.0f;
 int						    g_iFrame = 0;
 bool			            g_bPause = false;
 ImVec4						g_vClearColour = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
+ImVec4						g_vClearColourFade;
 int							g_iPressIdentifier = 0;
 int							g_iPadding = 0;
 bool					    g_bTrackMouse = false;
+bool						g_bMouseMoved = false;
 bool						g_bFullscreen = false;
 bool						g_bResChanged = false;
 bool						g_bFullWindow = false;
@@ -149,6 +151,7 @@ bool						g_bAutoReload = false;
 bool						g_bNewProjLoad = false;
 bool						g_bDefaultEditorSelected = false;
 bool						g_bVsync = true;
+bool						g_bNeedsResize = true;
 float						g_fPlaySpeed = 1.0f;
 time_t						g_tTimeCreated;
 std::vector<std::string>	g_vShaderErrorList;
@@ -163,6 +166,8 @@ ImVec4						g_vResourceWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vMainImageWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vControlWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vShaderErrorWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+ImVec2						g_vImageOffset = ImVec2(0.0f, 0.0f);
 
 std::vector<CustomizableBuffer>					g_vCustomizableBuffer;
 UINT											g_iCustomizableBufferSize = 0;
@@ -193,6 +198,8 @@ void				ImGuiRender();
 //--------------------------------------------------------------------------------------
 void Initialize()
 {
+	g_vClearColourFade = g_vClearColour;
+
 	int enumEditor = 1;
 	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColour, g_vAppSize, enumEditor, g_bAutoReload);
 	g_eDefaultEditor = static_cast<ImGuiEnum::DefaultEditor>(enumEditor);
@@ -213,7 +220,7 @@ void Initialize()
 	std::string projectPathToCheck = PROJECT_PATH + std::string(g_strProject);
 	dwAttrib = GetFileAttributes(projectPathToCheck.c_str());
 
-	if (dwAttrib == INVALID_FILE_ATTRIBUTES)
+	if (dwAttrib == INVALID_FILE_ATTRIBUTES || g_strProject == "")
 	{
 		// If this project doesn't exist then we fall back to the default one
 		g_strProject = DEFAULT_PROJECT_NAME;
@@ -576,9 +583,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			case VK_F11:
 				g_bFullscreen = !g_bFullscreen;
+				g_bNeedsResize = true;
 				break;
 			case VK_F5:
 				// Reload Shaders
+				if (g_bCtrl)
+				{
+					g_fGameT = 0;
+					delete g_pTexturelib;
+					g_pTexturelib = nullptr;
+
+					g_pTexturelib = new TextureLib();
+					g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
+					g_pTexturelib->m_bReload = true;
+				}
 				ReloadShaders();
 				break;
 			case 'P':
@@ -592,6 +610,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			case VK_ESCAPE:
 				if (g_bFullscreen)
 					g_bFullscreen = false;
+
+				g_bNeedsResize = true;
 				break;
 			case 'Q':
 				// Quit
@@ -678,7 +698,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_MOUSEMOVE:
 	{
-		if ((wParam & MK_LBUTTON) && g_bTrackMouse)
+		g_bMouseMoved = true;
+
+		if (g_bTrackMouse)
 		{
 			POINTS pts = MAKEPOINTS(lParam);
 			g_vMouse.x = pts.x;
@@ -703,6 +725,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_bFullscreen = false;
 			else if(g_bTrackMouse)
 				g_bFullscreen = true;
+
+			g_bNeedsResize = true;
 		}
 
 		g_tLastClick = newClick;
@@ -922,7 +946,7 @@ HRESULT InitDevice()
 	hr = CompileShaderFromFile(((std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
-		MessageBox(nullptr,
+		MessageBox(g_hWnd,
 			(LPCSTR)"Error with the vertex shader.", (LPCSTR)"Error", MB_OK);
 		return hr;
 	}
@@ -965,11 +989,11 @@ HRESULT InitDevice()
 		{
 			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
 
-			MessageBox(nullptr,
+			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
 
-		MessageBox(nullptr,
+		MessageBox(g_hWnd,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 	}
 
@@ -1053,7 +1077,7 @@ HRESULT InitDevice()
 
 	// Set constant buffers
 	CBNeverChanges cbNC;
-	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 1.0f / (float)width, 1.0f / (float)height);
 	cbNC.ChannelResolution[0] = g_Resource[0].m_vChannelRes;
 	cbNC.ChannelResolution[1] = g_Resource[1].m_vChannelRes;
 	cbNC.ChannelResolution[2] = g_Resource[2].m_vChannelRes;
@@ -1270,6 +1294,22 @@ void AutoReload()
 	}
 }
 
+void ClearColourFade()
+{
+	if ((g_vClearColour.x == g_vClearColourFade.x)
+		&& (g_vClearColour.y == g_vClearColourFade.y)
+		&& (g_vClearColour.z == g_vClearColourFade.z)
+		&& (g_vClearColour.w == g_vClearColourFade.w))
+		return;
+
+
+	// TODO - base off time
+	g_vClearColour.x -= ((g_vClearColour.x - g_vClearColourFade.x) * 2.0f * GetImGuiDeltaTime());
+	g_vClearColour.y -= ((g_vClearColour.y - g_vClearColourFade.y) * 2.0f * GetImGuiDeltaTime());
+	g_vClearColour.z -= ((g_vClearColour.z - g_vClearColourFade.z) * 2.0f * GetImGuiDeltaTime());
+	g_vClearColour.w -= ((g_vClearColour.w - g_vClearColourFade.w) * 2.0f * GetImGuiDeltaTime());
+}
+
 
 //--------------------------------------------------------------------------------------
 // Render the frame
@@ -1279,6 +1319,8 @@ void Render()
 	if(g_bAutoReload)
 		AutoReload();
 
+	ClearColourFade();
+
 	if (g_pTexturelib->m_bReload)
 	{
 		for (int i = 0; i < MAX_RESORCES; ++i)
@@ -1287,9 +1329,6 @@ void Render()
 			{
 				// Get texture from texture lib
 				g_pTexturelib->GetTexture(g_Resource[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
-
-				// Texture
-				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
 			}
 
 			g_Buffers->ReloadTexture(g_pTexturelib, i);
@@ -1304,15 +1343,32 @@ void Render()
 		if (g_Buffers[i].m_bIsActive)
 		{
 			// Update the buffer frames
-			g_Buffers[i].Render(g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), (UINT)g_vCurrentWindowSize.x, (UINT)g_vCurrentWindowSize.y, i);
+			g_Buffers[i].Render(g_Buffers, g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), (UINT)g_vCurrentWindowSize.x, (UINT)g_vCurrentWindowSize.y, i);
 		}
 	}
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	if (g_iPadding == 0)
 	{
-		// Bind the correct textures and buffer resources
-		if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
-			g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
+		for (int i = 0; i < MAX_RESORCES; ++i)
+		{
+			// Bind the correct textures and buffer resources
+			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
+				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
+			else if (g_Resource[i].m_Type == Channels::ChannelType::E_Buffer)
+			{
+				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Buffers[(int)g_Resource[i].m_iBufferIndex].m_pShaderResourceView);
+			}
+		}
+	}
+	else
+	{
+		for (int i = 0; i < MAX_RESORCES; ++i)
+		{
+			if (g_Buffers[g_iPadding - 1].m_Res[i].m_Type == Channels::ChannelType::E_Texture)
+				g_pImmediateContext->PSSetShaderResources(i + g_iPadding * MAX_RESORCES, 1, &g_Buffers[g_iPadding - 1].m_Res[i].m_pShaderResource);
+			if (g_Buffers[g_iPadding - 1].m_Res[i].m_Type == Channels::ChannelType::E_Buffer)
+				g_pImmediateContext->PSSetShaderResources(i + g_iPadding * MAX_RESORCES, 1, &g_Buffers[g_Buffers[g_iPadding - 1].m_Res[i].m_iBufferIndex].m_pShaderResourceView);
+		}
 	}
 
 	// Set the shaders
@@ -1326,11 +1382,15 @@ void Render()
 		RECT window;
 		GetWindowRect(g_hWnd, &window);
 
-		Resize((float)(window.right - window.left), (float)(window.bottom - window.top));
+		if (g_bNeedsResize)
+		{
+			Resize((float)(window.right - window.left), (float)(window.bottom - window.top));
+			g_bNeedsResize = false;
+		}
 
-		if (g_iPadding != 0)
+		if(g_iPadding != 0)
 			g_pImmediateContext->PSSetShader(g_Buffers[g_iPadding - 1].m_pPixelShader, nullptr, 0);
-
+		
 		g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, nullptr);
 	}
 
@@ -1365,20 +1425,34 @@ void Render()
 	if (!g_bFullscreen)
 		g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, DirectX::Colors::MidnightBlue);
 	else
-	{	
-		if(g_iPadding == 0)
-			g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, DirectX::Colors::MidnightBlue);
-		else
-			g_pImmediateContext->ClearRenderTargetView(g_Buffers[g_iPadding - 1].m_pRenderTargetView, DirectX::Colors::Cyan);
-	}
+		g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, DirectX::Colors::MidnightBlue);
 
 	//
 	// Update variables that change once per frame
 	//
 	CBChangesEveryFrame cb;
 	cb.m_iFrame = g_iFrame++;
-	if(g_bTrackMouse)
+	if (g_bTrackMouse)
+	{
+		if (g_bMouseMoved)
+		{
+			g_vMouse.x -= g_vImageOffset.x;
+			g_vMouse.y -= g_vImageOffset.y;
+
+			if (g_vMouse.x < 0)
+				g_vMouse.x = 0;
+			if (g_vMouse.y < 0)
+				g_vMouse.y = 0;
+
+			if (g_vMouse.x > g_vCurrentWindowSize.x - g_vPadding.x)
+				g_vMouse.x = g_vCurrentWindowSize.x - g_vPadding.x;
+			if (g_vMouse.y > g_vCurrentWindowSize.y - g_vPadding.y)
+				g_vMouse.y = g_vCurrentWindowSize.y - g_vPadding.y;
+
+			g_bMouseMoved = false;
+		}
 		cb.m_vMouse = g_vMouse;
+	}
 	else
 		cb.m_vMouse = DirectX::XMFLOAT4(g_vMouse.x, g_vMouse.y, 0.0f, 0.0f);
 
@@ -1402,7 +1476,7 @@ void Render()
 
 	// Buffer that only changes with the channel resolution
 	CBNeverChanges cbNC;
-	cbNC.Resolution = DirectX::XMFLOAT4((float)g_vCurrentWindowSize.x, (float)g_vCurrentWindowSize.y, 0.0f, 0.0f);
+	cbNC.Resolution = DirectX::XMFLOAT4((float)g_vCurrentWindowSize.x, (float)g_vCurrentWindowSize.y, 1.0f / (float)g_vCurrentWindowSize.x, 1.0f / (float)g_vCurrentWindowSize.y);
 	cbNC.ChannelResolution[0] = g_Resource[0].m_vChannelRes;
 	cbNC.ChannelResolution[1] = g_Resource[1].m_vChannelRes;
 	cbNC.ChannelResolution[2] = g_Resource[2].m_vChannelRes;
@@ -1410,7 +1484,8 @@ void Render()
 
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
-	void* customizableBufferData = malloc((g_iCustomizableBufferSize / 16 + 1) * 16);
+	int allocSize = MEMORY_ALIGNINT(g_iCustomizableBufferSize, 4 * sizeof(float));
+	void* customizableBufferData = malloc(allocSize);
 
 	for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
 	{
@@ -1555,6 +1630,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_pRenderTargetTexture,
 		g_Resource,
 		g_vClearColour,
+		g_vClearColourFade,
 		g_Buffers,
 		g_pTexturelib,
 		g_eDefaultEditor,
@@ -1636,6 +1712,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_Buffers,
 		g_vWindowSize,
 		g_vCurrentWindowSize,
+		g_vImageOffset,
 		g_vPadding,
 		g_windowFlags,
 		g_strProject.c_str(),
@@ -1650,18 +1727,15 @@ void ImGuiSetup(HINSTANCE hInstance)
 	KeepImGuiWindowsInsideApp(g_vAppSize, g_vShaderErrorWindow, g_bResChanged);
 
 	// Shader Compiler Errors
-	if (g_vShaderErrorList.size() > 0)
-	{
-		ShaderErrorWindow(
-			g_Buffers,
-			g_vShaderErrorList,
-			g_strProject,
-			g_strDefaultEditor,
-			g_eDefaultEditor,
-			g_bResChanged,
-			g_vShaderErrorWindow
-		);
-	}
+	ShaderErrorWindow(
+		g_Buffers,
+		g_vShaderErrorList,
+		g_strProject,
+		g_strDefaultEditor,
+		g_eDefaultEditor,
+		g_bResChanged,
+		g_vShaderErrorWindow
+	);
 
 	// Selection of default editor
 	if (!g_bDefaultEditorSelected)
@@ -1683,6 +1757,8 @@ void ReloadShaders()
 {
 	HRESULT hr = S_OK;
 
+	g_vClearColourFade = g_vClearColour;
+
 	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
@@ -1702,7 +1778,7 @@ void ReloadShaders()
 	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
-		MessageBox(nullptr,
+		MessageBox(g_hWnd,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 	}
 
@@ -1713,7 +1789,7 @@ void ReloadShaders()
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
 	if (FAILED(hr))
 	{
-		MessageBox(nullptr,
+		MessageBox(g_hWnd,
 			(LPCSTR)"Error creating pixel shader.", (LPCSTR)"Error", MB_OK);
 		return;
 	}
@@ -1755,6 +1831,8 @@ void ReloadShaders()
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
+
+	g_vClearColour = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 //--------------------------------------------------------------------------------------
@@ -1778,11 +1856,11 @@ HRESULT LoadProject()
 		{
 			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
 
-			MessageBox(nullptr,
+			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
 
-		MessageBox(nullptr,
+		MessageBox(g_hWnd,
 			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 	}
 

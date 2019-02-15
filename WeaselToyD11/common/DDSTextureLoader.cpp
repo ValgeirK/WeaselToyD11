@@ -1463,6 +1463,10 @@ namespace
                     }
                 }
             }
+
+			D3D11_SUBRESOURCE_DATA* pSubRes = initData.release();
+			delete pSubRes;
+			pSubRes = nullptr;
         }
 
         return hr;
@@ -1714,6 +1718,10 @@ namespace
 			}
 		}
 
+		D3D11_SUBRESOURCE_DATA* pSubData = initData.release();
+		delete pSubData;
+		pSubData = nullptr;
+
 		return hr;
 	}
 
@@ -1914,6 +1922,10 @@ HRESULT DirectX::GetTextureInformation(const wchar_t* fileName, uint32_t& width,
 	width = header->width;
 	height = header->height;
 
+	uint8_t* pData = ddsData.release();
+	delete pData;
+	pData = nullptr;
+
 	return hr;
 }
 
@@ -2015,6 +2027,10 @@ HRESULT DirectX::CreateDDSTextureFromFileEx(ID3D11Device* d3dDevice,
         bitData, bitSize, maxsize,
         usage, bindFlags, cpuAccessFlags, miscFlags, forceSRGB,
         texture, textureView);
+
+	uint8_t* pDataPointer = ddsData.release();
+	delete pDataPointer;
+	pDataPointer = nullptr;
 
     if (SUCCEEDED(hr))
     {

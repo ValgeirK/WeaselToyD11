@@ -87,9 +87,9 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 	do
 	{
 		char strCommand[MAX_PATH] = "";
-		float min = -1.0f;
-		float max = -1.0f;
-		float step = -1.0f;
+		float min = 0.0f;
+		float max = 1.0f;
+		float step = 1.0f;
 		char strVarName[MAX_PATH] = "";
 		char strMin[MAX_PATH] = "";
 		char strMax[MAX_PATH] = "";
@@ -183,7 +183,7 @@ void ShaderReflectionAndPopulation(
 					if (strcmp(varDesc.Name, vCustomizableBuffer[i].strVariable) == 0)
 					{
 						// variable was found with a command in shader
-						iCustomizableBufferSize += varDesc.Size;
+						iCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
 						vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
 
 						int copyIndex = -1;
@@ -208,7 +208,12 @@ void ShaderReflectionAndPopulation(
 								if (copyIndex >= 0)
 									((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)(vCustomizableBufferCopy[copyIndex]).data)[i];
 								else
-									((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+								{
+									if (varDesc.DefaultValue != nullptr)
+										((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+									else
+										((float*)vCustomizableBuffer[iVariables].data)[i] = 0.0f;
+								}
 							}
 						}
 						else if (typeDesc.Type == D3D_SVT_INT)
@@ -221,7 +226,12 @@ void ShaderReflectionAndPopulation(
 								if (copyIndex >= 0)
 									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)(vCustomizableBufferCopy[copyIndex]).data)[i];
 								else
-									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+								{
+									if (varDesc.DefaultValue != nullptr)
+										((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+									else
+										((int*)vCustomizableBuffer[iVariables].data)[i] = 0;
+								}
 							}
 						}
 						else
@@ -240,7 +250,7 @@ void ShaderReflectionAndPopulation(
 				if(!isFound)
 				{
 					// variable was not found with a command in the shader
-					iCustomizableBufferSize += varDesc.Size;
+					iCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
 
 					CustomizableBuffer cb;
 					strcpy(cb.strCommand, "input");

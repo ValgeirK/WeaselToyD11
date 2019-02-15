@@ -26,8 +26,8 @@ void SetDebugObjectName(ID3D11DeviceChild* pResource, const char * pName)
 	size_t NumChars = strlen(pName);
 	//pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)NumChars+1, pName);
 #else
-	UNREFERENCED_PARAMETER(resource);
-	UNREFERENCED_PARAMETER(name);
+	//UNREFERENCED_PARAMETER(resource);
+	//UNREFERENCED_PARAMETER(name);
 #endif // USE_DEBUG_MARKERS
 }
 

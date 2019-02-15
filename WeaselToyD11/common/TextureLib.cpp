@@ -20,11 +20,11 @@ CONDITION_VARIABLE BufferNotEmpty;
 CONDITION_VARIABLE BufferNotFull;
 CRITICAL_SECTION CriticalSection;
 
-typedef struct LoadData
+struct LoadData
 {
 	ID3D11Device*  device;
-	TextureLib*    textureLib;
-} LOADDATA, *PLOADDATA;
+	void*    textureLib;
+};
 
 struct TextureMemory
 {
@@ -58,6 +58,32 @@ TextureLib::TextureLib() : m_iLength(0), m_iCapacity(1)
 	m_pIsSet = new bool[m_iCapacity];
 }
 
+TextureLib::~TextureLib()
+{
+	// Release resources used by the critical section object.
+	DeleteCriticalSection(&CriticalSection);
+
+	for (int i = 0; i < m_iLength; ++i)
+	{
+		delete[] m_ppPath[i];
+		m_ppPath[i] = nullptr;
+
+		m_pShaderResource[i]->Release();
+		m_pShaderResource[i] = nullptr;
+	}
+
+	delete[] m_ppPath;
+	m_ppPath = nullptr;
+
+	delete[] m_pShaderResource;
+	m_pShaderResource = nullptr;
+
+	delete[] m_pIsSet;
+	m_pIsSet = nullptr;
+
+	HeapFree(GetProcessHeap(), 0, m_pLoadData);
+}
+
 void TextureLib::Release()
 { 
 	// Release resources used by the critical section object.
@@ -66,6 +92,9 @@ void TextureLib::Release()
 	// Release all the DirectX resources
 	for (int i = 0; i < m_iLength; ++i)
 	{
+		delete[] m_ppPath[i];
+		m_ppPath[i] = nullptr;
+
 		ULONG refs = 0;
 		if (m_pShaderResource[i])
 			m_pShaderResource[i]->Release();
@@ -76,6 +105,17 @@ void TextureLib::Release()
 			_RPTF2(_CRT_WARN, "TextureLib %s still has %i references.\n", m_ppPath[i], refs);
 		}
 	}
+
+	delete[] m_ppPath;
+	m_ppPath = nullptr;
+
+	delete[] m_pShaderResource;
+	m_pShaderResource = nullptr;
+
+	delete[] m_pIsSet;
+	m_pIsSet = nullptr;
+
+	HeapFree(GetProcessHeap(), 0, m_pLoadData);
 }
 
 void TextureLib::Add(const char* textPath)
@@ -104,8 +144,20 @@ void TextureLib::Add(const char* textPath)
 		m_iCapacity *= 2;
 		delete[] m_ppPath;
 		delete m_pIsSet;
-		m_ppPath = temp;
-		m_pIsSet = tempSet;
+
+		m_ppPath = new char*[m_iCapacity];
+		m_pIsSet = new bool[m_iCapacity];
+
+		for (int i = 0; i < m_iCapacity / 2; ++i)
+		{
+			m_ppPath[i] = new char[MAX_PATH];
+			strcpy_s(m_ppPath[i], MAX_PATH, temp[i]);
+			m_pIsSet[i] = tempSet[i];
+			delete[] temp[i];
+		}
+
+		delete[] temp;
+		delete[] tempSet;
 	}
 	
 	m_ppPath[m_iLength] = new char[MAX_PATH];
@@ -238,20 +290,22 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 		InitializeCriticalSection(&CriticalSection);
 		InitializeConditionVariable(&BufferNotEmpty);
 
-		PLOADDATA pLoadData;
 		DWORD   dwThreadIdArrayFile, dwThreadIdArrayTexture;
 		HANDLE threadFileLoad, threadTextureLoad;
 
-		pLoadData = (PLOADDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LOADDATA));
+		m_pLoadData = (LoadData*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LoadData));
 
-		pLoadData->device = device;
-		pLoadData->textureLib = this;
+		m_pLoadData->device = device;
+		m_pLoadData->textureLib = this;
+
+		// For single thread texture loading
+		//LoadTexturesSingleThread(device);
 
 		threadFileLoad = CreateThread(
 			NULL,                   // default security attributes
 			0,                      // use default stack size  
 			ThreadFileLoader,		// thread function name
-			pLoadData,              // argument to thread function 
+			m_pLoadData,              // argument to thread function 
 			0,                      // use default creation flags 
 			&dwThreadIdArrayFile        // returns the thread identifier 
 		);
@@ -260,7 +314,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 			NULL,
 			0,
 			ThreadTextureLoader,
-			pLoadData,
+			m_pLoadData,
 			0,
 			&dwThreadIdArrayTexture
 		);
@@ -272,6 +326,53 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 	return hr;
 }
 
+/////////////////////////////////////////////////////////////
+// Single Thread related functions
+/////////////////////////////////////////////////////////////
+
+
+void TextureLib::LoadTexturesSingleThread(ID3D11Device* device)
+{
+	for (int i = 1; i < this->m_iLength; ++i)
+	{
+		TextureMemory tm;
+
+		const size_t cSize = strlen(this->m_ppPath[i]) + 1;
+		wchar_t* path = new wchar_t[cSize];
+		mbstowcs(path, this->m_ppPath[i], cSize);
+
+		std::unique_ptr<uint8_t[]> ddsData;
+
+		LoadTextureFile(path, ddsData, &tm.header, &tm.bitData, &tm.bitSize);
+
+		//tm.ddsData = ddsData.release();
+		tm.id = i;
+
+		DirectX::CreateDDSTextureFromFileCustom(
+			device,
+			path,
+			const_cast<uint8_t*>(tm.bitData),
+			tm.header,
+			tm.bitData,
+			tm.bitSize,
+			nullptr,
+			&this->m_pShaderResource[tm.id]);
+
+		uint32_t width = 0, height = 0;
+		DirectX::GetTextureInformation(path, width, height);
+
+		this->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+
+		this->m_pIsSet[tm.id] = true;
+
+		uint8_t* pDataPointer = ddsData.release();
+		delete pDataPointer;
+		pDataPointer = nullptr;
+
+		delete[] path;
+		path = nullptr;
+	}
+}
 
 /////////////////////////////////////////////////////////////
 // Thread related functions
@@ -279,18 +380,18 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 
 DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 {
-	PLOADDATA data = (PLOADDATA)lpParam;
+	LoadData* data = (LoadData*)lpParam;
 
-	for (int i = 1; i < data->textureLib->m_iLength; ++i)
+	for (int i = 1; i < ((TextureLib*)data->textureLib)->m_iLength; ++i)
 	{
 		TextureMemory tm;
 
 		// PIX Event
 		PIXBeginEvent(0, L"Thread_LoadingTextures");
 
-		const size_t cSize = strlen(data->textureLib->m_ppPath[i]) + 1;
+		const size_t cSize = strlen(((TextureLib*)data->textureLib)->m_ppPath[i]) + 1;
 		wchar_t* path = new wchar_t[cSize];
-		mbstowcs(path, data->textureLib->m_ppPath[i], cSize);
+		mbstowcs(path, ((TextureLib*)data->textureLib)->m_ppPath[i], cSize);
 
 		std::unique_ptr<uint8_t[]> ddsData;
 
@@ -311,6 +412,8 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 
 		WakeConditionVariable(&BufferNotEmpty);
 
+		delete[] path;
+
 		PIXEndEvent(); // THREAD_LOADINGTEXTURES
 	}
 	
@@ -326,7 +429,7 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 {
 	// Cast the input into the correct type
-	PLOADDATA data = (PLOADDATA)lpParam;
+	LoadData* data = (LoadData*)lpParam;
 
 	TextureMemory tm;
 
@@ -351,9 +454,9 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 		// Release ownership of the critical section.
 		LeaveCriticalSection(&CriticalSection);
 
-		const size_t cSize = strlen(data->textureLib->m_ppPath[tm.id]) + 1;
+		const size_t cSize = strlen(((TextureLib*)data->textureLib)->m_ppPath[tm.id]) + 1;
 		wchar_t* path = new wchar_t[cSize];
-		mbstowcs(path, data->textureLib->m_ppPath[tm.id], cSize);
+		mbstowcs(path, ((TextureLib*)data->textureLib)->m_ppPath[tm.id], cSize);
 
 		DirectX::CreateDDSTextureFromFileCustom(
 			data->device,
@@ -363,23 +466,27 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 			tm.bitData,
 			tm.bitSize,
 			nullptr,
-			&data->textureLib->m_pShaderResource[tm.id]);
+			&((TextureLib*)data->textureLib)->m_pShaderResource[tm.id]);
 
 		uint32_t width = 0, height = 0;
 		DirectX::GetTextureInformation(path, width, height);
-		delete path;
 
-		data->textureLib->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+		((TextureLib*)data->textureLib)->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
 
-		data->textureLib->m_pIsSet[tm.id] = true;
+		((TextureLib*)data->textureLib)->m_pIsSet[tm.id] = true;
 		counter++;
+
+		delete[] path;
+
+		delete tm.ddsData;
+		tm.ddsData = nullptr;
 
 		PIXEndEvent(); // THREAD_LOADTOSHADERVIEW
 
 		// Exit since we loaded all the textures
-		if (counter >= data->textureLib->m_iLength && filesLoaded.size() == 0)
+		if (counter >= ((TextureLib*)data->textureLib)->m_iLength && filesLoaded.size() == 0)
 		{
-			data->textureLib->m_bReload = true;
+			((TextureLib*)data->textureLib)->m_bReload = true;
 			break;
 		}
 	}

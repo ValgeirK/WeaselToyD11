@@ -119,8 +119,6 @@ HRESULT Buffer::InitBuffer(
 
 			m_Res[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
 			m_Res[i].m_iBufferIndex = static_cast<int>(m_Channels[i].m_BufferId);
-
-			Create2DTexture(pd3dDevice, &m_pRenderTargetTextureCopy, nullptr, &m_pShaderResourceViewCopy, width, height);
 			
 			// There is a buffer that needs resizing
 			m_bResizeBuffer = true;
@@ -150,14 +148,6 @@ void Buffer::ResizeTexture(ID3D11Device* device, ID3D11DeviceContext* context, c
 	if (m_pShaderResourceView)m_pShaderResourceView->Release();
 
 	Create2DTexture(device, &m_pRenderTargetTexture, &m_pRenderTargetView, &m_pShaderResourceView, width, height);
-
-	if (m_bResizeBuffer)
-	{
-		if (m_pRenderTargetTextureCopy)m_pRenderTargetTextureCopy->Release();
-		if (m_pShaderResourceViewCopy)m_pShaderResourceViewCopy->Release();
-
-		Create2DTexture(device, &m_pRenderTargetTextureCopy, nullptr, &m_pShaderResourceViewCopy, width, height);
-	}
 
 	for(int i = 0; i < MAX_RESORCES; ++i)
 	{
@@ -245,8 +235,9 @@ void Buffer::SetShaderResource(ID3D11DeviceContext* pImmediateContext, const int
 
 void Buffer::ClearShaderResource(ID3D11DeviceContext* pImmediateContext, ID3D11DepthStencilView* pDepthStencilView)
 {
+	// Clearing the Shader Resource so it's not bound on clear
 	ID3D11ShaderResourceView* renderNull = nullptr;
-	for(int i = 0; i < MAX_RESORCES; ++i)
+	for(int i = 0; i < MAX_RESORCES * (MAX_RESORCES + 1); ++i)
 		pImmediateContext->PSSetShaderResources(i, 1, &renderNull);
 	
 	ID3D11RenderTargetView* viewNull = nullptr;
@@ -257,6 +248,7 @@ void Buffer::ClearShaderResource(ID3D11DeviceContext* pImmediateContext, ID3D11D
 }
 
 void Buffer::Render(
+	Buffer* pBuffers,
 	ID3D11DeviceContext* pImmediateContext,
 	ID3D11DepthStencilView* pDepthStencilView,
 	ID3D11Buffer* pCBNeverChanges,
@@ -294,10 +286,12 @@ void Buffer::Render(
 	{
 		if (m_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
-			pImmediateContext->CopyResource(m_pRenderTargetTextureCopy, m_pRenderTargetTexture);
-			pImmediateContext->PSSetShaderResources(i + (index + 1)* MAX_RESORCES, 1, &m_pShaderResourceViewCopy);
+			if (pBuffers[(int)m_Channels[i].m_BufferId].m_pRenderTargetTexture != NULL)
+			{
+				pImmediateContext->PSSetShaderResources(i + (index + 1)* MAX_RESORCES, 1, &pBuffers[(int)m_Channels[i].m_BufferId].m_pShaderResourceView);
+			}
 		}
-		else
+		else if (m_Channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
 			pImmediateContext->PSSetShaderResources(i + padding * MAX_RESORCES, 1, &m_Res[i].m_pShaderResource);
 		}
@@ -312,7 +306,7 @@ void Buffer::Render(
 	pImmediateContext->ClearRenderTargetView(m_pRenderTargetView, DirectX::Colors::Aqua);
 
 	CBNeverChanges cbNC;
-	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+	cbNC.Resolution = DirectX::XMFLOAT4((float)width, (float)height, 1.0f / (float)width, 1.0f / (float)height);
 	cbNC.ChannelResolution[0] = m_Res[0].m_vChannelRes;
 	cbNC.ChannelResolution[1] = m_Res[1].m_vChannelRes;
 	cbNC.ChannelResolution[2] = m_Res[2].m_vChannelRes;
@@ -337,7 +331,7 @@ void Buffer::Release(int index)
 {
 	ULONG refs = 0;
 
-	for (int i = 0; i < m_iSize; ++i)
+	for (int i = 0; i < MAX_RESORCES; ++i)
 	{
 		if (m_Res[i].m_Type != Channels::ChannelType::E_None && m_pSampler[i])
 			refs = m_pSampler[i]->Release();
@@ -348,26 +342,6 @@ void Buffer::Release(int index)
 		{
 			_RPTF2(_CRT_WARN, "Buffer Sampler %i still has %i references.\n", i, refs);
 		}
-	}
-
-	if (m_pRenderTargetTextureCopy)
-		refs = m_pRenderTargetTextureCopy->Release();
-	else
-		refs = 0;
-
-	if (refs > 0)
-	{
-		_RPTF2(_CRT_WARN, "Buffer RenderTargetTextureCopy still has %i references.\n", refs);
-	}
-
-	if (m_pShaderResourceViewCopy)
-		refs = m_pShaderResourceViewCopy->Release();
-	else
-		refs = 0;
-
-	if (refs > 0)
-	{
-		_RPTF2(_CRT_WARN, "Buffer ShaderResourceViewCopy still has %i references.\n", refs);
 	}
 	
 	if (m_pPixelShader)
