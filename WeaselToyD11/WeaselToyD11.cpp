@@ -338,8 +338,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 	if (g_bUseRenderdoc && GetRenderDocLoc(wPath))
 	{
-		std::string path(wPath.length(), ' ');
-		std::copy(wPath.begin(), wPath.end(), path.begin());
+		std::string path(wPath.begin(), wPath.end());
 		
 		if (RenderdocCheck(path))
 		{
