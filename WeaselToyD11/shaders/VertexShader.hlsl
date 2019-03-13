@@ -19,7 +19,7 @@ PS_INPUT main( VS_INPUT input )
 	PS_INPUT res = (PS_INPUT)0;
 	
 	res.pos = input.pos;
-	res.uv = input.uv;
+	res.uv = float2(input.uv.x,  1 - input.uv.y);
 	
     return res;
 }

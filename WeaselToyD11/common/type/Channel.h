@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstring>
+#include "HashDefines.h"
 
 namespace Channels
 {
@@ -42,13 +42,15 @@ struct Channel
 		m_Filter = Channels::FilterType::E_Linear;
 		m_Wrap = Channels::WrapType::E_Clamp;
 		m_BufferId = Channels::BufferId::E_BufferA;
+		m_iTextureSlot = -1;
 	};
 
 	Channel(const char path[]) { strcpy(m_strTexture, path); };
 
 	Channels::ChannelType	m_Type;
-	char					m_strTexture[50];
+	char					m_strTexture[MAX_PATH];
 	Channels::FilterType	m_Filter;
 	Channels::WrapType		m_Wrap;
 	Channels::BufferId		m_BufferId;
+	int						m_iTextureSlot;
 };

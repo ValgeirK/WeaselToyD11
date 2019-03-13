@@ -5,7 +5,7 @@
 struct ID3D11ShaderResourceView;
 struct ID3D11SamplerState;
 
-#include "Channel.h"
+enum Channels::ChannelType;
 
 struct Resource
 {
@@ -17,4 +17,5 @@ struct Resource
 	bool					  m_bIsActive;
 	int						  m_iSize;
 	int						  m_iBufferIndex;
+	int						  m_iTextureSlot = -1;
 };

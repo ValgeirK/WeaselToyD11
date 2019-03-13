@@ -23,14 +23,14 @@ cbuffer cbCustomisable : register (b2)
 	float def;
 };
 
-float4 main(PS_INPUT input) : SV_Target
+float4 mainImage(PS_INPUT input) : SV_Target
 {
 	// Normalized pixel coordinates (from 0 to 1)
     float2 uv = fragCoord/iResolution.xy;
 	
 	float3 col = (0, 0, 0);
 	
-	float weaselTime = 2.0;
+	float weaselTime = 5.0;
 		
 	if(iTime > weaselTime)
 	{    
@@ -43,7 +43,6 @@ float4 main(PS_INPUT input) : SV_Target
 	}
 	else
 	{	
-		uv.y *= -1;
 	    float3 tex1 = tx1.Sample(iChannel1, uv).xyz;
 		col = tex1 * (weaselTime - iTime);
 	}

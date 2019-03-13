@@ -14,7 +14,6 @@ struct TextureLib
 
 	void LoadTexturesSingleThread(ID3D11Device*);
 
-	void Release();
 	void Add(const char*);
 
 	void GetTexture(const char*, ID3D11ShaderResourceView**);

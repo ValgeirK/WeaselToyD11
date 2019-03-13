@@ -90,33 +90,27 @@ HRESULT CreateSampler(
 	if (FAILED(hr))
 		return hr;
 
-	int padding = 0;
 	switch (location)
 	{
 	case 0:
-		padding = 1;
-		SetDebugObjectName(*pSampler, "BufferA_Sampler");
+		SetDebugObjectName(*pSampler, "TextureSampler");
 		break;
 	case 1:
-		padding = 2;
-		SetDebugObjectName(*pSampler, "BufferB_Sampler");
+		SetDebugObjectName(*pSampler, "BufferA_Sampler");
 		break;
 	case 2:
-		padding = 3;
-		SetDebugObjectName(*pSampler, "BufferC_Sampler");
+		SetDebugObjectName(*pSampler, "BufferB_Sampler");
 		break;
 	case 3:
-		padding = 4;
-		SetDebugObjectName(*pSampler, "BufferD_Sampler");
+		SetDebugObjectName(*pSampler, "BufferC_Sampler");
 		break;
-	default:
-		padding = 0;
-		SetDebugObjectName(*pSampler, "TextureSampler");
+	case 4:
+		SetDebugObjectName(*pSampler, "BufferD_Sampler");
 		break;
 	}
 
 	// Sampler
-	pImmediateContext->PSSetSamplers(index + 4*padding, 1, pSampler);
+	pImmediateContext->PSSetSamplers(index + 4* location, 1, pSampler);
 
 	return hr;
 }

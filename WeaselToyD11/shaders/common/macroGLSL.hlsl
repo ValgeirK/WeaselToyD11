@@ -61,8 +61,8 @@
 #define mix 					lerp
 #define fma						mad
 
-
-#define mod fmod
+#define inversesqrt				rsqrt
+#define mod 					fmod
 
 
 #define fragCoord (input.uv * iResolution.xy)

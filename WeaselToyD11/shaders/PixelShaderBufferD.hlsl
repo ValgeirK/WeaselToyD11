@@ -11,7 +11,7 @@ struct PS_INPUT
 	float2 uv : UV;
 };
 
-float4 main(PS_INPUT input) : SV_Target
+float4 mainImage(PS_INPUT input) : SV_Target
 {
 	// Normalized pixel coordinates (from 0 to 1)
     float2 uv = fragCoord/iResolution.xy;

@@ -6,6 +6,7 @@
 #include "../lib/imgui_impl_win32.h"
 
 #include <d3d11.h>
+#include <d3dcompiler.h>
 #include <ctime>
 #include <string.h>
 #include <process.h>
@@ -23,69 +24,65 @@
 
 #include "../ImGuiFileDialog.h"
 
+#include "../renderdoc_app.h"
+
 //--------------------------------------------------------------------------------------
 // Methods to decrease code
 //--------------------------------------------------------------------------------------
 
 void BufferSwitchLookup(std::string& strName, int index, std::string post = "")
 {
-	switch (index)
+	assert(index >= 0 && index < MAX_RESORCESCHANNELS);
+
+	static std::string bufferText[]
 	{
-	case 0:
-		strName = "Buffer A";
-		break;
-	case 1:
-		strName = "Buffer B";
-		break;
-	case 2:
-		strName = "Buffer C";
-		break;
-	case 3:
-		strName = "Buffer D";
-		break;
-	}
+		"Buffer A",
+		"Buffer B",
+		"Buffer C",
+		"Buffer D"
+	};
+
+	assert(sizeof(bufferText) / sizeof(std::string) == MAX_RESORCESCHANNELS);
+
+	strName = bufferText[index];
 
 	strName += post;
 }
 
 void TextureSwitchLookup(std::string& strName, int index, std::string post = "")
 {
-	switch (index)
+	assert(index >= 0 && index < MAX_RESORCESCHANNELS);
+
+	static std::string textureText[]
 	{
-	case 0:
-		strName = "Texture A";
-		break;
-	case 1:
-		strName = "Texture B";
-		break;
-	case 2:
-		strName = "Texture C";
-		break;
-	case 3:
-		strName = "Texture D";
-		break;
-	}
+		"Texture A",
+		"Texture B",
+		"Texture C",
+		"Texture D"
+	};
+
+	assert(sizeof(textureText) / sizeof(std::string) == MAX_RESORCESCHANNELS);
+
+	strName = textureText[index];
 
 	strName += post;
 }
 
 void ChannelPathSwitchLookup(std::string& path, const char* strProj, int index)
 {
-	switch (index)
+	assert(index >= 0 && index < MAX_RESORCESCHANNELS);
+
+	std::string channelPath[]
 	{
-	case 0:
-		path = path + std::string(strProj) + std::string("\\channels\\channelsA.txt");
-		break;
-	case 1:
-		path = path + std::string(strProj) + std::string("\\channels\\channelsB.txt");
-		break;
-	case 2:
-		path = path + std::string(strProj) + std::string("\\channels\\channelsC.txt");
-		break;
-	case 3:
-		path = path + std::string(strProj) + std::string("\\channels\\channelsD.txt");
-		break;
-	}
+		path + std::string(strProj) + std::string("\\channels\\channelsA.txt"),
+		path + std::string(strProj) + std::string("\\channels\\channelsB.txt"),
+		path + std::string(strProj) + std::string("\\channels\\channelsC.txt"),
+		path + std::string(strProj) + std::string("\\channels\\channelsD.txt")
+	};
+
+	assert(sizeof(channelPath) / sizeof(std::string) == MAX_RESORCESCHANNELS);
+
+	path = channelPath[index];
 }
 
 void LineText(Resource* pResource, Buffer* pBuffer, int index, float scale)
@@ -179,12 +176,12 @@ bool ButtonLine(const char* strName, ImVec2 vWindowSize, float fItemSpacing, flo
 	return res;
 }
 
-void ViewButtonLine(const char* strName, int& iPadding, ImVec2 vWindowSize, float fItemSpacing, float& fButtonWidth, float& fPos, int index, bool active, int hovered, float scale, float fButtonCount)
+void ViewButtonLine(const char* strName, int& iLocation, ImVec2 vWindowSize, float fItemSpacing, float& fButtonWidth, float& fPos, int index, bool active, int hovered, float scale, float fButtonCount)
 {
 	bool useColour = false;
 	ImVec4 colour = ImVec4();
 
-	if (iPadding == index)
+	if (iLocation == index)
 	{
 		// Active tab
 		useColour = true;
@@ -208,8 +205,8 @@ void ViewButtonLine(const char* strName, int& iPadding, ImVec2 vWindowSize, floa
 	if (useColour)
 		ImGui::PushStyleColor(ImGuiCol_Button, colour);
 
-	if (ButtonLine(strName, vWindowSize, fItemSpacing, fButtonWidth, fPos, scale, fButtonCount))
-		iPadding = index;
+	if (ButtonLine(strName, vWindowSize, fItemSpacing, fButtonWidth, fPos, scale, fButtonCount) && active)
+		iLocation = index;
 
 	if(useColour)
 		ImGui::PopStyleColor();
@@ -235,7 +232,7 @@ void ErrorLine(std::string strName, std::string strProj, std::string strDefaultE
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_NOTEPAD)
 			system((std::string("start notepad ") + std::string(shaderName)).c_str());
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_NOTEPADPP)
-			system((std::string("start notepad++ ") + std::string(shaderName) + std::string(" -n0")).c_str());
+			system((std::string("start notepad++ ") + std::string(shaderName) + std::string(" -n") + ints[0]).c_str());
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_OTHER)
 			system((std::string("start ") + strDefaultEditor + std::string(" ") + std::string(shaderName)).c_str());
 	}
@@ -454,43 +451,43 @@ void MainResolution(ID3D11Texture2D* pRenderTargetTexture, ImGuiEnum::AspectRati
 	item_current = 0; // Custom
 	if (xRes == 800 && yRes == 600)
 		item_current = 1; // 800x600
-	if (xRes == 1024 && yRes == 600)
+	else if (xRes == 1024 && yRes == 600)
 		item_current = 2; // 1024x600
-	if (xRes == 1024 && yRes == 768)
+	else if (xRes == 1024 && yRes == 768)
 		item_current = 3; // 1024x768
-	if (xRes == 1152&& yRes == 864)
+	else if (xRes == 1152&& yRes == 864)
 		item_current = 4; // 1152x864
-	if (xRes == 1280&& yRes == 720)
+	else if (xRes == 1280&& yRes == 720)
 		item_current = 5; // 1280x720
-	if (xRes == 1280 && yRes == 768)
+	else if (xRes == 1280 && yRes == 768)
 		item_current = 6; // 1280x768
-	if (xRes == 1280 && yRes == 800)
+	else if (xRes == 1280 && yRes == 800)
 		item_current = 7; // 1280x800
-	if (xRes == 1280 && yRes == 1024)
+	else if (xRes == 1280 && yRes == 1024)
 		item_current = 8; // 1080x1024
-	if (xRes == 1360 && yRes == 768)
+	else if (xRes == 1360 && yRes == 768)
 		item_current = 9; // 1360x768
-	if (xRes == 1366 && yRes == 768)
+	else if (xRes == 1366 && yRes == 768)
 		item_current = 10; // 1366x768
-	if (xRes == 1440 && yRes == 900)
+	else if (xRes == 1440 && yRes == 900)
 		item_current = 11; // 1440x900
-	if (xRes == 1536 && yRes == 864)
+	else if (xRes == 1536 && yRes == 864)
 		item_current = 12; // 1536x864
-	if (xRes == 1600 && yRes == 900)
+	else if (xRes == 1600 && yRes == 900)
 		item_current = 13; // 1600x900
-	if (xRes == 1680 && yRes == 1050)
+	else if (xRes == 1680 && yRes == 1050)
 		item_current = 14; // 1680x1050
-	if (xRes == 1920 && yRes == 1080)
+	else if (xRes == 1920 && yRes == 1080)
 		item_current = 15; // 1920x1080
-	if (xRes == 1920 && yRes == 1200)
+	else if (xRes == 1920 && yRes == 1200)
 		item_current = 16; // 1920x1200
-	if (xRes == 2560 && yRes == 1080)
+	else if (xRes == 2560 && yRes == 1080)
 		item_current = 17; // 2560x1080
-	if (xRes == 2560 && yRes == 1440)
+	else if (xRes == 2560 && yRes == 1440)
 		item_current = 18; // 2560x1440
-	if (xRes == 3440 && yRes == 1440)
+	else if (xRes == 3440 && yRes == 1440)
 		item_current = 19; // 3440x1440
-	if (xRes == 3840 && yRes == 2160)
+	else if (xRes == 3840 && yRes == 2160)
 		item_current = 20; // 3840x2160
 
 
@@ -705,10 +702,12 @@ void ControlWindow(
 	int iFrame, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
 	bool& bDefaultEditorSet, bool bIsFullwindow,
-	bool& bGoFullscreenChange, bool& bVsync,
+	bool& bGoFullscreenChange, bool& bVsync, 
+	bool& bGrabbing, bool& bRenderdoc,
 	ImVec4& vWindowInfo,
 	ImVec4& vMainWindowInfo,
-	std::vector<CustomizableBuffer>& vCustomizableBuffer
+	std::vector<CustomizableBuffer>& vCustomizableBuffer,
+	RENDERDOC_API_1_1_2** rdoc_api
 )
 {
 	ImGui::Begin("Control Panel");
@@ -759,19 +758,23 @@ void ControlWindow(
 		buttonWidth = 150.0f;
 		// Save this project
 		ImGui::Begin("Save..");
-		ImGui::InputText("Project name", const_cast<char*>(strProj.c_str()), 20);
+		static char newStrProj[20] = "";
+		ImGui::InputText("Project name", newStrProj, 20);
 
 		ImGui::Separator();
 		if (ButtonLine("Cancel", windowSize, itemSpacing, buttonWidth, pos, fScaling, 2.0f))
 			copyClicked = false;
 		if (ButtonLine("Save", windowSize, itemSpacing, buttonWidth, pos, fScaling, 2.0f))
 		{
-			std::string oldPath = basePath + strProj;
-			system((std::string("md ") + newPath + std::string("\\channels")).c_str());
-			system((std::string("md ") + newPath + std::string("\\shaders")).c_str());
-			system((std::string("xcopy ") + oldPath + std::string("\\channels ") + newPath + std::string("\\channels") + std::string(" /i /E")).c_str());
-			system((std::string("xcopy ") + oldPath + std::string("\\shaders ") + newPath + std::string("\\shaders") + std::string(" /i /E")).c_str());
-			copyClicked = false;
+			if (strcmp(newStrProj, "") != 0)
+			{
+				std::string oldPath = basePath + std::string(newStrProj);
+				system((std::string("md \"") + oldPath + std::string("\\channels\"")).c_str());
+				system((std::string("md \"") + oldPath + std::string("\\shaders\"")).c_str());
+				system((std::string("xcopy ") + std::string(".\\channels \"") + oldPath + std::string("\\channels") + std::string("\" /i /E")).c_str());
+				system((std::string("xcopy ") + std::string(".\\shaders \"") + oldPath + std::string("\\shaders") + std::string("\" /i /E")).c_str());
+				copyClicked = false;
+			}
 		}
 		ImGui::End();
 	}
@@ -796,10 +799,10 @@ void ControlWindow(
 			newPath = basePath + std::string(newStrProj);
 
 			// Create new directory for new project, with simple shader present
-			system((std::string("md ") + newPath + std::string("\\channels")).c_str());
-			system((std::string("md ") + newPath + std::string("\\shaders")).c_str());
-			system((std::string("xcopy channels ") + newPath + std::string("\\channels") + std::string(" /i /E")).c_str());
-			system((std::string("xcopy shaders ") + newPath + std::string("\\shaders") + std::string(" /i /E")).c_str());
+			system((std::string("md \"") + newPath + std::string("\\channels\"")).c_str());
+			system((std::string("md \"") + newPath + std::string("\\shaders\"")).c_str());
+			system((std::string("xcopy ") + std::string(".\\channels \"") + newPath + std::string("\\channels") + std::string("\" /i /E")).c_str());
+			system((std::string("xcopy ") + std::string(".\\shaders \"") + newPath + std::string("\\shaders") + std::string("\" /i /E")).c_str());
 			bNewProj = true;
 			newClicked = false;
 		}
@@ -814,11 +817,14 @@ void ControlWindow(
 			if (ImGuiFileDialog::Instance(pTextureLib)->IsOk == true)
 			{
 				strProj = ImGuiFileDialog::Instance(pTextureLib)->GetSelectedFile();
-				bNewProj = true;
+				if(strProj != "")
+					bNewProj = true;
 			}
 
 			ImGuiFileDialog::Instance(pTextureLib)->Clear();
-			loadClicked = false;
+
+			if (strProj != "")
+				loadClicked = false;
 		}
 	}
 
@@ -837,23 +843,23 @@ void ControlWindow(
 	if (ImGui::Button(playButtonLabel, ImVec2(windowSize.x / 4.0f, 25.0f)))
 		bPause = !bPause;
 
+	const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+	if (ImGui::Button("Restart", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
+	{
+		fGameT = 0.0f;
+		buttonPress |= MASK_RELOAD_SHADERS;
+	}
+
 	ImGui::SameLine();
 	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - windowSize.x / 3.0f);
 	ImGui::PushItemWidth(windowSize.x / 3.0f);
 	ImGui::Text("Play Speed:");
 	ImGui::PopItemWidth();
 
-	const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
-
-	if (ImGui::Button("Restart", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
-	{
-		fGameT = 0.0f;
-		buttonPress += 0x0001;
-	}
-
 	if (ImGui::Button("Reload Shaders", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
 	{
-		buttonPress += 0x0001;
+		buttonPress |= MASK_RELOAD_SHADERS;
 	}
 
 	ImGui::SameLine();
@@ -861,6 +867,26 @@ void ControlWindow(
 	ImGui::PushItemWidth(windowSize.x / 3.0f);
 	ImGui::InputFloat("playback", &playSpeed, 0.01f, 0.0f, "%.2f");
 	ImGui::PopItemWidth();
+
+	if (ImGui::Button("Reload Textures", ImVec2(windowSize.x / 2.0f + ItemSpacing, 25.0f)))
+	{
+		buttonPress |= MASK_RELOAD_TEXTURES;
+	}
+
+	if (*rdoc_api != nullptr)
+	{
+		if (bGrabbing)
+		{
+			(*rdoc_api)->EndFrameCapture(NULL, NULL);
+			bGrabbing = false;
+		}
+
+		if (ImGui::Button("RenderDoc grab", ImVec2(ImGui::GetWindowContentRegionMax().x, 30.0f)))
+		{
+			(*rdoc_api)->StartFrameCapture(NULL, NULL);
+			bGrabbing = true;
+		}
+	}
 
 	if (!bIsFullwindow)
 	{
@@ -896,6 +922,9 @@ void ControlWindow(
 
 	// Auto Reload Option
 	ImGui::Checkbox("Auto Reload", &bAutoReload);
+
+	// Use Renderdoc on startup
+	ImGui::Checkbox("Renderdoc (requires app restart)", &bRenderdoc);
 
 	ImGui::Separator();
 
@@ -951,10 +980,11 @@ void MainImageWindow(
 	const char* strProj,
 	std::string strDefaultEditor,
 	ImGuiEnum::DefaultEditor defaultEditor,
-	int& iPadding, int iHovered,
+	int* piIsUsed,
+	int& iLocation, int iHovered,
 	float scaling,
 	bool& bTrackMouse,
-	bool& bFullscreen, 
+	bool& bExpandedImage, 
 	bool bResChanged,
 	ImVec4& vWindowInfo
 )
@@ -988,10 +1018,12 @@ void MainImageWindow(
 	for (int i = 4; i >= 0; --i)
 	{
 		if (i == 0)
-			ViewButtonLine("Scene", iPadding, vWindowSize, itemSpacing, buttonWidth, pos, 0, true, iHovered, scaling, 5.0f);
-
-		BufferSwitchLookup(strName, i - 1);
-		ViewButtonLine(strName.c_str(), iPadding, vWindowSize, itemSpacing, buttonWidth, pos, i, pBuffer[i - 1].m_bIsActive, iHovered, scaling, 5.0f);
+			ViewButtonLine("Scene", iLocation, vWindowSize, itemSpacing, buttonWidth, pos, 0, true, iHovered, scaling, 5.0f);
+		else
+		{
+			BufferSwitchLookup(strName, i - 1);
+			ViewButtonLine(strName.c_str(), iLocation, vWindowSize, itemSpacing, buttonWidth, pos, i, piIsUsed[i - 1], iHovered, scaling, 5.0f);
+		}
 	}
 
 	windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
@@ -1012,7 +1044,7 @@ void MainImageWindow(
 
 	const char* shaderName = "";
 
-	if (iPadding == 0)
+	if (iLocation == 0)
 	{
 		shaderName = "shaders/PixelShader.hlsl";
 		ImGui::Image(pShaderResourceView, ImVec2(vCurrentWindowSize.x - vPadding.x, vCurrentWindowSize.y - vPadding.y));
@@ -1020,14 +1052,14 @@ void MainImageWindow(
 	}
 	else
 	{
-		if (pBuffer[iPadding - 1].m_bIsActive)
+		if (pBuffer[iLocation - 1].m_bIsActive)
 		{
 			
-			ImGui::Image(pBuffer[iPadding - 1].m_pShaderResourceView, ImVec2(vCurrentWindowSize.x - vPadding.x, vCurrentWindowSize.y - vPadding.y));
+			ImGui::Image(pBuffer[iLocation - 1].m_pShaderResourceView, ImVec2(vCurrentWindowSize.x - vPadding.x, vCurrentWindowSize.y - vPadding.y));
 			bMoveHover = ImGui::IsItemHovered();
 		}
 		
-		switch (iPadding)
+		switch (iLocation)
 		{
 		case 1:
 			shaderName = "shaders/PixelShaderBufferA.hlsl";
@@ -1055,7 +1087,7 @@ void MainImageWindow(
 
 	ImGui::SetCursorScreenPos(ImVec2(position.x + 10.0f, position.y + 60.0f));
 	if (ImGui::Button("Expand"))
-		bFullscreen = !bFullscreen;
+		bExpandedImage = !bExpandedImage;
 
 	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor(1.0f, 1.0f, 1.0f, 0.0f));
 	ImGui::SetCursorScreenPos(ImVec2(position.x + 10.0f, position.y + vCurrentWindowSize.y - 30.0f));
@@ -1064,17 +1096,142 @@ void MainImageWindow(
 	if (ImGui::Button(shaderName))
 	{
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_DEFAULT)
-			system((std::string("start ") + path + std::string(strProj) + std::string("\\") + std::string(shaderName)).c_str());
+			system((std::string("start \"") + path + std::string(strProj) + std::string("\\") + std::string(shaderName) + std::string("\"")).c_str());
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_NOTEPAD)
-			system((std::string("start notepad ") + path + std::string(strProj) + std::string("\\") + std::string(shaderName)).c_str());
+			system((std::string("start notepad \"") + path + std::string(strProj) + std::string("\\") + std::string(shaderName) + std::string("\"")).c_str());
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_NOTEPADPP)
-			system((std::string("start notepad++ ") + path + std::string(strProj) + std::string("\\") + std::string(shaderName) + std::string(" -n0")).c_str());
+			system((std::string("start notepad++ \"") + path + std::string(strProj) + std::string("\\") + std::string(shaderName) + std::string("\" -n0")).c_str());
 		if (defaultEditor == ImGuiEnum::DefaultEditor::E_OTHER)
-			system((std::string("start ") + strDefaultEditor + std::string(" ") + path + std::string(strProj) + std::string("\\") + std::string(shaderName)).c_str());
+			system((std::string("start \"") + strDefaultEditor + std::string(" ") + path + std::string(strProj) + std::string("\\") + std::string(shaderName + std::string("\""))).c_str());
 	}
 	ImGui::PopStyleColor();
 
 	ImGui::End();
+}
+
+void SamplerSelection(
+	ID3D11Device*			pDevice,
+	ID3D11DeviceContext*	pContext,
+	Buffer*					pBuffer,
+	Channel*				pChannel,
+	Resource*				pResource,
+	int						iLocation,
+	int						iResource,
+	const char*				strProj
+)
+{
+	int filterChange = -1;
+	int wrapChange = -1;
+
+	// Allow for changes to the filter of samplers
+	if (ImGui::BeginMenu("Sampler Filter"))
+	{
+		Channel* pChannelCopy;
+		if (iLocation == 0)
+			pChannelCopy = &pChannel[iResource - 1];	
+		else
+			pChannelCopy = &pBuffer[iLocation - 1].m_Channels[iResource - 1];
+
+		if (pChannelCopy->m_Filter == Channels::FilterType::E_Nearest)
+		{
+			ImGui::MenuItem("nearest", nullptr, false, false);
+
+			if (ImGui::MenuItem("linear"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Linear;
+				filterChange = (int)Channels::FilterType::E_Linear;
+			}
+			else if (ImGui::MenuItem("mipmap"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Mipmap;
+				filterChange = (int)Channels::FilterType::E_Mipmap;
+			}
+		}
+		else if (pChannelCopy->m_Filter == Channels::FilterType::E_Linear)
+		{
+			ImGui::MenuItem("linear", nullptr, false, false);
+
+			if (ImGui::MenuItem("nearest"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Nearest;
+				filterChange = (int)Channels::FilterType::E_Nearest;
+			}
+			else if (ImGui::MenuItem("mipmap"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Mipmap;
+				filterChange = (int)Channels::FilterType::E_Mipmap;
+			}
+		}
+		else if (pChannelCopy->m_Filter == Channels::FilterType::E_Mipmap)
+		{
+			ImGui::MenuItem("mipmap", nullptr, false, false);
+
+			if (ImGui::MenuItem("nearest"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Nearest;
+				filterChange = (int)Channels::FilterType::E_Nearest;
+			}
+			else if (ImGui::MenuItem("linear"))
+			{
+				pChannelCopy->m_Filter = Channels::FilterType::E_Linear;
+				filterChange = (int)Channels::FilterType::E_Linear;
+			}
+		}
+
+		ImGui::EndMenu();
+	}
+
+	// Allow to change the wrap type of the sampler
+	if (ImGui::BeginMenu("Sampler Wrap"))
+	{
+		Channel* pChannelCopy;
+
+		if (iLocation == 0)
+			pChannelCopy = &pChannel[iResource - 1];
+		else
+			pChannelCopy = &pBuffer[iLocation - 1].m_Channels[iResource - 1];
+
+		if (pChannelCopy->m_Wrap == Channels::WrapType::E_Clamp)
+		{
+			ImGui::MenuItem("clamp", nullptr, false, false);
+
+			if (ImGui::MenuItem("repeat"))
+			{
+				pChannelCopy->m_Wrap = Channels::WrapType::E_Repeat;
+				wrapChange = (int)Channels::WrapType::E_Repeat;
+			}
+		}
+		else if (pChannelCopy->m_Wrap == Channels::WrapType::E_Repeat)
+		{
+			ImGui::MenuItem("repeat", nullptr, false, false);
+
+			if (ImGui::MenuItem("clamp"))
+			{
+				pChannelCopy->m_Wrap = Channels::WrapType::E_Clamp;
+				wrapChange = (int)Channels::WrapType::E_Clamp;
+			}
+		}
+
+		ImGui::EndMenu();
+	}
+
+	if (filterChange >= 0 || wrapChange >= 0)
+	{
+		std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
+
+		if (iLocation == 0)
+		{
+			strcpy(pChannel[iResource - 1].m_strTexture, "textures/default.dds");
+			path = path + std::string(strProj) + std::string("\\channels\\channels.txt");
+			WriteChannel(path.c_str(), pChannel);
+		}
+		else
+		{
+			strcpy(pBuffer[iLocation - 1].m_Channels[iResource - 1].m_strTexture, "textures/default.dds");
+			ChannelPathSwitchLookup(path, strProj, iLocation - 1);
+			WriteChannel(path.c_str(), pBuffer[iLocation - 1].m_Channels);
+		}
+	}
 }
 
 void ResourceWindow(
@@ -1084,11 +1241,13 @@ void ResourceWindow(
 	Resource* pResource,
 	Buffer* pBuffer,
 	Channel* pChannel,
-	TextureLib* pTextureLib, 
+	TextureLib* pTextureLib,
+	DWORD dwShaderFlags,
 	const char* strProj,
 	float scaling,
-	int& iPadding, int& iPressIdentifier, 
-	int& iHovered, 
+	int* piBufferUsed,
+	int& iLocation, int& iPressIdentifier,
+	int& iHovered,
 	bool bResChanged, bool& bProjChange,
 	ImVec2 vSize,
 	ImVec4& vWindowInfo
@@ -1127,11 +1286,11 @@ void ResourceWindow(
 	float imgButtonPos = itemSpacing;
 
 	// Setting the right image button resource
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		int index = 0;
 		Channels::ChannelType bufferType = Channels::ChannelType::E_None;
-		if (iPadding == 0)
+		if (iLocation == 0)
 		{
 			// Main image
 			index = pResource[i].m_iBufferIndex;
@@ -1140,8 +1299,8 @@ void ResourceWindow(
 		else
 		{
 			// Buffers
-			index = pBuffer[iPadding - 1].m_Res[i].m_iBufferIndex;
-			bufferType = pBuffer[iPadding - 1].m_Res[i].m_Type;
+			index = pBuffer[iLocation - 1].m_Res[i].m_iBufferIndex;
+			bufferType = pBuffer[iLocation - 1].m_Res[i].m_Type;
 		}
 
 		if (bufferType == Channels::ChannelType::E_Buffer)
@@ -1160,7 +1319,7 @@ void ResourceWindow(
 				iHovered = index + 1;
 
 				if (ImGui::IsMouseClicked(0))
-					iPadding = index + 1;
+					iLocation = index + 1;
 			}
 
 			if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(1))
@@ -1186,52 +1345,36 @@ void ResourceWindow(
 		}
 		else if (bufferType == Channels::ChannelType::E_Texture)
 		{
-			if (iPadding == 0)
+			ID3D11ShaderResourceView* pShaderResourceViewCopy;
+
+			if (iLocation == 0)
 			{
-				// Main Image
-				if(!vertical)
-					pressed = ImGui::ImageButton(pResource[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-				else
-				{
-					ImGui::SameLine(imgButtonPos);
-					pressed = ImGui::ImageButton(pResource[i].m_pShaderResource, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-				}
-				bool hov = ImGui::IsItemHovered();
-				if (hov && ImGui::IsMouseDoubleClicked(0))
-				{
-					std::string cmd = std::string("explorer.exe " + std::string(pResource[i].m_strTexture));
-					std::replace(cmd.begin(), cmd.end(), '/', '\\');
-					system(cmd.c_str());
-				}
-				if (hov && ImGui::IsMouseClicked(1))
-				{
-					selected = pResource[i].m_strTexture;
-					ImGui::OpenPopup("select");
-					iRightIdentifier = i + 1;
-				}
+				pShaderResourceViewCopy = pResource[i].m_pShaderResource;
 			}
 			else
 			{
-				if(!vertical)
-					pressed = ImGui::ImageButton(pBuffer[iPadding - 1].m_Res[i].m_pShaderResource, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-				else
-				{
-					ImGui::SameLine(imgButtonPos);
-					pressed = ImGui::ImageButton(pBuffer[iPadding - 1].m_Res[i].m_pShaderResource, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-				}
-				bool hov = ImGui::IsItemHovered();
-				if (hov && ImGui::IsMouseDoubleClicked(0))
-				{
-					std::string cmd = std::string("explorer.exe " + std::string(pBuffer[iPadding - 1].m_Res[i].m_strTexture));
-					std::replace(cmd.begin(), cmd.end(), '/', '\\');
-					system(cmd.c_str());
-				}
-				if (hov && ImGui::IsMouseClicked(1))
-				{
-					selected = pBuffer[iPadding - 1].m_Res[i].m_strTexture;
-					ImGui::OpenPopup("select");
-					iRightIdentifier = i + 1;
-				}
+				pShaderResourceViewCopy = pBuffer[iLocation - 1].m_Res[i].m_pShaderResource;
+			}
+
+			if (!vertical)
+				pressed = ImGui::ImageButton(pShaderResourceViewCopy, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			else
+			{
+				ImGui::SameLine(imgButtonPos);
+				pressed = ImGui::ImageButton(pShaderResourceViewCopy, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+			}
+			bool hov = ImGui::IsItemHovered();
+			if (hov && ImGui::IsMouseDoubleClicked(0))
+			{
+				std::string cmd = std::string("explorer.exe " + std::string(pResource[i].m_strTexture));
+				std::replace(cmd.begin(), cmd.end(), '/', '\\');
+				system(cmd.c_str());
+			}
+			if (hov && ImGui::IsMouseClicked(1))
+			{
+				selected = pResource[i].m_strTexture;
+				ImGui::OpenPopup("select");
+				iRightIdentifier = i + 1;
 			}
 
 			if (pressed)
@@ -1254,18 +1397,22 @@ void ResourceWindow(
 		}
 		else
 		{
+			std::string buttonLabel = "";
+			for (int j = 0; j < i; ++j)
+				buttonLabel += " ";
+
 			if(!vertical)
-				ImGui::ImageButton(nullptr, ImVec2(windowSize.x - 22.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				ImGui::Button(buttonLabel.c_str(), ImVec2(windowSize.x - 15.0f * scaling, (windowSize.y) / 4.0f - 18.0f * scaling));
 			else
 			{
 				ImGui::SameLine(imgButtonPos);
 				imgButtonPos += imgButtonWidth + itemSpacing;
-				ImGui::ImageButton(nullptr, ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling), ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+				ImGui::Button(buttonLabel.c_str(), ImVec2(imgButtonWidth, windowSize.y - 41.0f * scaling));
 			}
 			bool hov = ImGui::IsItemHovered();
 			if (hov && ImGui::IsMouseClicked(1))
 			{
-				selected = pBuffer[iPadding - 1].m_Res[i].m_strTexture;
+				selected = pBuffer[iLocation - 1].m_Res[i].m_strTexture;
 				ImGui::OpenPopup("select");
 				iRightIdentifier = i + 1;
 			}
@@ -1293,22 +1440,25 @@ void ResourceWindow(
 				iChangeInput = 5;
 			else if (ImGui::MenuItem("Texture"))
 				iChangeInput = 0;
-			else if (iPadding != 1 && ImGui::MenuItem("BufferA"))
+			else if (iLocation != 1 && ImGui::MenuItem("BufferA"))
 				iChangeInput = 1;
-			else if (iPadding != 2 && ImGui::MenuItem("BufferB"))
+			else if (iLocation != 2 && ImGui::MenuItem("BufferB"))
 				iChangeInput = 2;
-			else if (iPadding != 3 && ImGui::MenuItem("BufferC"))
+			else if (iLocation != 3 && ImGui::MenuItem("BufferC"))
 				iChangeInput = 3;
-			else if (iPadding != 4 && ImGui::MenuItem("BufferD"))
+			else if (iLocation != 4 && ImGui::MenuItem("BufferD"))
 				iChangeInput = 4;
 			else
 			{
 				// The padding shouldn't go higher than 5
-				assert(iPadding < 5);
+				assert(iLocation < 5);
 			}
 
 			ImGui::EndMenu();
 		}
+		
+		SamplerSelection(pDevice, pContext, pBuffer, pChannel, pResource, iLocation, iRightIdentifier, strProj);
+
 		ImGui::EndPopup();
 	}
 
@@ -1316,34 +1466,26 @@ void ResourceWindow(
 	{
 		std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
 
-		if (iPadding == 0)
+		if (iLocation == 0)
 		{
 			if (iChangeInput == 0)
 			{
 				pChannel[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Texture;
 				pChannel[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
 				pChannel[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Repeat;
+				piBufferUsed[pResource[iRightIdentifier - 1].m_iBufferIndex] -= 1;
 			}
 			else if (iChangeInput == 5)
 			{
 				pChannel[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
 				pResource[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
+				piBufferUsed[pResource[iRightIdentifier - 1].m_iBufferIndex] -= 1;
 			}
 			else
 			{
 				pChannel[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Buffer;
 				pChannel[iRightIdentifier - 1].m_BufferId = Channels::BufferId(iChangeInput - 1);
-				if (!pBuffer[iRightIdentifier - 1].m_bIsActive)
-					pBuffer[iRightIdentifier - 1].InitBuffer(
-						pDevice, 
-						pContext, 
-						pVertexShader,
-						pTextureLib, 
-						pBuffer, 
-						strProj, 
-						(int)vSize.x, 
-						(int)vSize.y, 
-						pChannel[iRightIdentifier - 1].m_BufferId);
+				piBufferUsed[iChangeInput - 1] += 1;
 			}
 
 			strcpy(pChannel[iRightIdentifier - 1].m_strTexture, "textures/default.dds");
@@ -1354,36 +1496,28 @@ void ResourceWindow(
 		{
 			if (iChangeInput == 0)
 			{
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Texture;
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Repeat;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Texture;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Repeat;
+				piBufferUsed[pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_BufferId] -= 1;
 			}
 			else if (iChangeInput == 5)
 			{
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_None;
+				piBufferUsed[pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_BufferId] -= 1;
 			}
 			else
 			{
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Buffer;
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_BufferId = Channels::BufferId(iChangeInput - 1);
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
-				pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Clamp;
-				if (!pBuffer[iRightIdentifier - 1].m_bIsActive)
-					pBuffer[iRightIdentifier - 1].InitBuffer(
-						pDevice, 
-						pContext, 
-						pVertexShader, 
-						pTextureLib, 
-						pBuffer, 
-						strProj, 
-						(int)vSize.x, 
-						(int)vSize.y, 
-						pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_BufferId);
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Type = Channels::ChannelType::E_Buffer;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_BufferId = Channels::BufferId(iChangeInput - 1);
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Filter = Channels::FilterType::E_Linear;
+				pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_Wrap = Channels::WrapType::E_Clamp;
+				piBufferUsed[iChangeInput - 1] += 1;
 			}
 
-			strcpy(pBuffer[iPadding - 1].m_Channels[iRightIdentifier - 1].m_strTexture, "textures/default.dds");
-			ChannelPathSwitchLookup(path, strProj, iPadding - 1);
-			WriteChannel(path.c_str(), pBuffer[iPadding - 1].m_Channels);
+			strcpy(pBuffer[iLocation - 1].m_Channels[iRightIdentifier - 1].m_strTexture, "textures/default.dds");
+			ChannelPathSwitchLookup(path, strProj, iLocation - 1);
+			WriteChannel(path.c_str(), pBuffer[iLocation - 1].m_Channels);
 		}
 
 		bProjChange = true;
@@ -1394,15 +1528,15 @@ void ResourceWindow(
 	if (iPressIdentifier)
 	{
 		std::string selected = "";
-		if (iPadding == 0)
+		if (iLocation == 0)
 			selected = pResource[iPressIdentifier - 1].m_strTexture;
 		else
-			selected = pBuffer[iPadding - 1].m_Res[iPressIdentifier - 1].m_strTexture;
+			selected = pBuffer[iLocation - 1].m_Res[iPressIdentifier - 1].m_strTexture;
 
 		static bool newTexture = false;
 		std::string fileName = "";
 
-		if (ImGuiFileDialog::Instance(pTextureLib)->FileDialog("Choose File", selected, iPadding, ".dds\0", ".\\textures", ""))
+		if (ImGuiFileDialog::Instance(pTextureLib)->FileDialog("Choose File", selected, iLocation, ".dds\0", ".\\textures", ""))
 		{
 			if (ImGuiFileDialog::Instance(pTextureLib)->IsOk == true)
 			{
@@ -1418,7 +1552,7 @@ void ResourceWindow(
 
 			// Update the resource
 			std::string path = std::string(PROJECT_PATH_DOUBLE_SLASH);
-			if (iPadding == 0)
+			if (iLocation == 0)
 			{
 				strcpy(pChannel[iPressIdentifier - 1].m_strTexture, fileName.c_str());
 				path = path + std::string(strProj) + std::string("\\channels\\channels.txt");
@@ -1426,9 +1560,9 @@ void ResourceWindow(
 			}
 			else
 			{
-				strcpy(pBuffer[iPadding - 1].m_Channels[iPressIdentifier - 1].m_strTexture, fileName.c_str());
-				ChannelPathSwitchLookup(path, strProj, iPadding - 1);
-				WriteChannel(path.c_str(), pBuffer[iPadding - 1].m_Channels);
+				strcpy(pBuffer[iLocation - 1].m_Channels[iPressIdentifier - 1].m_strTexture, fileName.c_str());
+				ChannelPathSwitchLookup(path, strProj, iLocation - 1);
+				WriteChannel(path.c_str(), pBuffer[iLocation - 1].m_Channels);
 			}
 
 			newTexture = true;
@@ -1441,29 +1575,21 @@ void ResourceWindow(
 
 			Channel channel = Channel(fileName.c_str());
 
-			if (iPadding == 0)
+			if (iLocation == 0)
 			{
 				// Main image
-
 				strcpy(pResource[iPressIdentifier - 1].m_strTexture, fileName.c_str());
 
 				// Get texture from texture lib
-				pTextureLib->GetTexture(channel.m_strTexture, &pResource[(iPressIdentifier - 1) + iPadding * 4].m_pShaderResource);
-
-				// Texture
-				pContext->PSSetShaderResources((iPressIdentifier - 1) + iPadding * 4, 1, &pResource[(iPressIdentifier - 1) + iPadding * 4].m_pShaderResource);
+				pTextureLib->GetTexture(channel.m_strTexture, &pResource[(iPressIdentifier - 1) + iLocation * 4].m_pShaderResource);
 			}
 			else
 			{
 				// Buffers
-
-				strcpy(pBuffer[iPadding - 1].m_Res[iPressIdentifier - 1].m_strTexture, fileName.c_str());
+				strcpy(pBuffer[iLocation - 1].m_Res[iPressIdentifier - 1].m_strTexture, fileName.c_str());
 
 				// Get texture from texture lib
-				pTextureLib->GetTexture(channel.m_strTexture, &pBuffer[iPadding - 1].m_Res[iPressIdentifier - 1].m_pShaderResource);
-
-				// Texture
-				pContext->PSSetShaderResources((iPressIdentifier - 1) + iPadding * 4, 1, &pBuffer[iPadding - 1].m_Res[iPressIdentifier - 1].m_pShaderResource);
+				pTextureLib->GetTexture(channel.m_strTexture, &pBuffer[iLocation - 1].m_Res[iPressIdentifier - 1].m_pShaderResource);
 			}
 
 			if (newTexture)
@@ -1592,6 +1718,155 @@ void Barrier(ImVec2 size)
 	ImGui::SetWindowSize(size);
 
 	ImGui::End();
+}
+
+void ShaderCompileItem(const char* strFlag, DWORD flag, DWORD oldFlags, DWORD& setFlags)
+{
+	bool check = oldFlags & flag ? true : false;
+	ImGui::Checkbox(strFlag, &check);
+	if (check)
+		setFlags |= flag;
+}
+
+bool MenuBar(
+	ID3D11DeviceContext* pContext,
+	ID3D11BlendState* pBlendStateEnabled,
+	ID3D11BlendState* pBlendStateDisabled,
+	DWORD& dwShaderFlags
+)
+{
+	DWORD shaderFlagCopy = dwShaderFlags;
+	static bool blendEnabled = false;
+
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("Settings"))
+		{
+			if (ImGui::BeginMenu("Blend"))
+			{
+				ImGui::Checkbox("Enabled", &blendEnabled);
+
+				FLOAT BlendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				UINT SampleMask = 0xffffffff;
+
+				if (blendEnabled)
+					pContext->OMSetBlendState(pBlendStateEnabled, BlendFactor, SampleMask);
+				else
+					pContext->OMSetBlendState(pBlendStateDisabled, BlendFactor, SampleMask);
+
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Compiler"))
+			{
+				if (ImGui::BeginMenu("Shader Flags"))
+				{
+					dwShaderFlags = 0;
+
+					ShaderCompileItem(
+						"D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY",
+						D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY, 
+						shaderFlagCopy, 
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_ENABLE_STRICTNESS",
+						D3DCOMPILE_ENABLE_STRICTNESS,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_DEBUG",
+						D3DCOMPILE_DEBUG,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_SKIP_VALIDATION",
+						D3DCOMPILE_SKIP_VALIDATION,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_OPTIMIZATION_LEVEL0",
+						D3DCOMPILE_OPTIMIZATION_LEVEL0,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_OPTIMIZATION_LEVEL1",
+						D3DCOMPILE_OPTIMIZATION_LEVEL1,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_OPTIMIZATION_LEVEL2",
+						D3DCOMPILE_OPTIMIZATION_LEVEL2,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_OPTIMIZATION_LEVEL3",
+						D3DCOMPILE_OPTIMIZATION_LEVEL3,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_PACK_MATRIX_ROW_MAJOR",
+						D3DCOMPILE_PACK_MATRIX_ROW_MAJOR,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR",
+						D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_IEEE_STRICTNESS",
+						D3DCOMPILE_IEEE_STRICTNESS,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_PARTIAL_PRECISION",
+						D3DCOMPILE_PARTIAL_PRECISION,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_AVOID_FLOW_CONTROL",
+						D3DCOMPILE_AVOID_FLOW_CONTROL,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_PREFER_FLOW_CONTROL",
+						D3DCOMPILE_PREFER_FLOW_CONTROL,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+					ShaderCompileItem(
+						"D3DCOMPILE_WARNINGS_ARE_ERRORS",
+						D3DCOMPILE_WARNINGS_ARE_ERRORS,
+						shaderFlagCopy,
+						dwShaderFlags
+					);
+
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenu();
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::EndMainMenuBar();
+	}
+
+	if (shaderFlagCopy != dwShaderFlags)
+		return true;
+
+	return false;
 }
 
 float GetImGuiDeltaTime()

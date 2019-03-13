@@ -49,6 +49,9 @@
     <ClCompile Include="common\RegisterHelper.cpp">
       <Filter>common</Filter>
     </ClCompile>
+    <ClCompile Include="common\Reflection.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\imgui_impl_dx11.h">
@@ -118,6 +121,9 @@
     </ClInclude>
     <ClInclude Include="common\type\HashDefines.h">
       <Filter>common\type</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Reflection.h">
+      <Filter>common</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

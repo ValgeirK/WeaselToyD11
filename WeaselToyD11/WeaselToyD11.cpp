@@ -5,6 +5,7 @@
 #include "lib/imgui_impl_dx11.h"
 #include "lib/imgui_impl_win32.h"
 
+#include <d3d9.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <directxmath.h>
@@ -21,27 +22,13 @@
 #include "common/TextureLib.h"
 #include "common/ImGuiWindows.h"
 #include "common/RegisterHelper.h"
+#include "common/Reflection.h"
 #include "common/type/ConstantBuffer.h"
 #include "common/type/Channel.h"
 #include "common/type/Resource.h"
 #include "common/type/HashDefines.h"
 
-
-//--------------------------------------------------------------------------------------
-// Defines
-//--------------------------------------------------------------------------------------
-#define D3D_VERIFY(func)					\
-	HRESULT hr = func;						\
-	assert(hr == S_OK);						
-
-
-#define SAFE_RELEASE(ptr)					\
-	if (ptr)								\
-	{										\
-		UINT RefCount = ptr->Release();		\
-		assert(RefCount == 0);				\
-		ptr = nullptr;						\
-	}
+#include "renderdoc_app.h"
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -56,7 +43,7 @@ struct SimpleVertex
 //--------------------------------------------------------------------------------------
 // Raw Data
 //--------------------------------------------------------------------------------------
-SimpleVertex g_Vertices[4] =
+SimpleVertex g_Vertices[QUAD_VERTICE_NUMB] =
 {
 	{ DirectX::XMFLOAT3(-1.0f,  1.0f, 1.0f), DirectX::XMFLOAT2(0.0f, 1.0f) },
 	{ DirectX::XMFLOAT3( 1.0f, -1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 0.0f) },
@@ -64,7 +51,7 @@ SimpleVertex g_Vertices[4] =
 	{ DirectX::XMFLOAT3( 1.0f,  1.0f, 1.0f), DirectX::XMFLOAT2(1.0f, 1.0f) }
 };
 
-WORD g_Indicies[6] =
+WORD g_Indicies[QUAD_INDICE_NUMB] =
 {
 	0, 1, 2,
 	0, 3, 1
@@ -88,17 +75,18 @@ ID3D11DepthStencilState*	g_pDepthStencilState = nullptr;
 ID3D11Texture2D*			g_pDepthStencilBuffer = nullptr;
 
 // Blend
-ID3D11BlendState*			g_pBlendState = nullptr;
+ID3D11BlendState*			g_pAlphaEnableBlendingState = nullptr;
+ID3D11BlendState*			g_pAlphaDisableBlendingState = nullptr;
 
 // Shaders
 ID3D11VertexShader*         g_pVertexShader = nullptr;
 ID3D11PixelShader*          g_pPixelShader = nullptr;
 
 // Resource
-Resource					g_Resource[MAX_RESORCES];
+Resource					g_Resource[MAX_RESORCESCHANNELS];
 
 // Buffers
-Buffer						g_Buffers[MAX_RESORCES];
+Buffer						g_Buffers[MAX_RESORCESCHANNELS];
 
 // ShaderToy Image
 ID3D11Texture2D*			g_pRenderTargetTexture = nullptr;
@@ -120,39 +108,36 @@ ID3D11ShaderReflection*		g_pPixelShaderReflection = nullptr;
 
 // Demo
 TextureLib*					g_pTexturelib;
-Channel						g_Channels[MAX_RESORCES];
-DirectX::XMFLOAT4           g_vMeshColor(0.7f, 0.7f, 0.7f, 1.0f);
+Channel						g_Channels[MAX_RESORCESCHANNELS];
 DirectX::XMFLOAT4			g_vMouse(0.0f, 0.0f, 0.0f, 0.0f);
 RECT						g_vAppSize = { 0, 0, 0, 0 };
 RECT						g_vDesktop;
-ImVec2						g_vCurrentWindowSize;
-ImVec2						g_vWindowSize;
-ImVec2						g_vPadding = ImVec2(16.0f, 65.0f);
-ImGuiWindowFlags			g_windowFlags;
+
 float				        g_fLastT = 0.0f;
 float						g_fDeltaT = 0.0f;
 float						g_fGameT = 0.0f;
 float						g_fPauseT = 0;
 float						g_fDPIscale = 1.0f;
+float						g_fPlaySpeed = 1.0f;
+int							g_piBufferUsed[MAX_RESORCESCHANNELS];
 int						    g_iFrame = 0;
-bool			            g_bPause = false;
-ImVec4						g_vClearColour = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
-ImVec4						g_vClearColourFade;
 int							g_iPressIdentifier = 0;
-int							g_iPadding = 0;
+int							g_iLocation = 0;
+bool			            g_bPause = false;
 bool					    g_bTrackMouse = false;
 bool						g_bMouseMoved = false;
-bool						g_bFullscreen = false;
+bool						g_bExpandedImage = false;
 bool						g_bResChanged = false;
 bool						g_bFullWindow = false;
 bool						g_bCtrl = false;
 bool						g_bAlt = false;
 bool						g_bAutoReload = false;
-bool						g_bNewProjLoad = false;
+bool						g_bNewProjLoaded = false;
 bool						g_bDefaultEditorSelected = false;
 bool						g_bVsync = true;
 bool						g_bNeedsResize = true;
-float						g_fPlaySpeed = 1.0f;
+bool						g_bGrabbingFrame = false;
+bool						g_bUseRenderdoc = false;
 time_t						g_tTimeCreated;
 std::vector<std::string>	g_vShaderErrorList;
 std::string					g_strProject = DEFAULT_PROJECT_NAME;
@@ -162,12 +147,22 @@ ImGuiEnum::DefaultEditor	g_eDefaultEditor = ImGuiEnum::DefaultEditor::E_NOTEPAD;
 ImGuiEnum::AspectRatio		g_eAspectRatio = ImGuiEnum::AspectRatio::E_NONE;
 ImGuiEnum::Resolution		g_eResolution = ImGuiEnum::Resolution::E_CUSTOM;
 
+ImVec2						g_vCurrentWindowSize;
+ImVec2						g_vWindowSize;
+ImVec2						g_vPadding = ImVec2(16.0f, 65.0f);
+ImVec4						g_vClearColour = ImVec4(0.08f, 0.12f, 0.14f, 1.00f);
+ImVec4						g_vClearColourFade;
+ImVec2						g_vImageOffset = ImVec2(0.0f, 0.0f);
 ImVec4						g_vResourceWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vMainImageWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vControlWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 ImVec4						g_vShaderErrorWindow = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+ImGuiWindowFlags			g_windowFlags;
 
-ImVec2						g_vImageOffset = ImVec2(0.0f, 0.0f);
+DWORD						g_dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+
+RENDERDOC_API_1_1_2*		g_rdoc_api = nullptr;
+
 
 std::vector<CustomizableBuffer>					g_vCustomizableBuffer;
 UINT											g_iCustomizableBufferSize = 0;
@@ -186,6 +181,7 @@ void				CleanupDevice();
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 void				Render();
 void				ReloadShaders();
+void				ReloadTextures();
 void				Resize(const float, const float);
 
 void				InitImGui();
@@ -201,7 +197,7 @@ void Initialize()
 	g_vClearColourFade = g_vClearColour;
 
 	int enumEditor = 1;
-	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColour, g_vAppSize, enumEditor, g_bAutoReload);
+	int exists = ReadIni(g_strProject, g_strDefaultEditor, g_vClearColour, g_vAppSize, g_dwShaderFlags, enumEditor, g_bAutoReload, g_bUseRenderdoc);
 	g_eDefaultEditor = static_cast<ImGuiEnum::DefaultEditor>(enumEditor);
 
 	const char* pathToCheck = PROJECT_PATH;
@@ -211,10 +207,10 @@ void Initialize()
 	{
 		// If this folder doesn't exist then we create it and create a new project 
 		std::string pathToCreate = PROJECT_PATH_DOUBLE_SLASH + std::string(DEFAULT_PROJECT_NAME);
-		system((std::string("md ") + pathToCreate + std::string("\\channels")).c_str());
-		system((std::string("md ") + pathToCreate + std::string("\\shaders")).c_str());
-		system((std::string("xcopy ") + std::string(".\\channels ") + pathToCreate + std::string("\\channels") + std::string(" /i /E")).c_str());
-		system((std::string("xcopy ") + std::string(".\\shaders ") + pathToCreate + std::string("\\shaders") + std::string(" /i /E")).c_str());
+		system((std::string("md \"") + pathToCreate + std::string("\\channels\"")).c_str());
+		system((std::string("md \"") + pathToCreate + std::string("\\shaders\"")).c_str());
+		system((std::string("xcopy ") + std::string(".\\channels \"") + pathToCreate + std::string("\\channels") + std::string("\" /i /E")).c_str());
+		system((std::string("xcopy ") + std::string(".\\shaders \"") + pathToCreate + std::string("\\shaders") + std::string("\" /i /E")).c_str());
 	}
 
 	std::string projectPathToCheck = PROJECT_PATH + std::string(g_strProject);
@@ -265,9 +261,9 @@ void DefaultImGuiWindows()
 			// 4K
 			g_vControlWindow = ImVec4(
 				1.0f,
-				1.0f,
+				23.0f,
 				width * 0.18f,
-				height * 0.45f
+				height * 0.5f
 			);
 			g_vMainImageWindow = ImVec4(
 				5.0f + width * 0.18f,
@@ -292,7 +288,7 @@ void DefaultImGuiWindows()
 			// 1080p
 			g_vControlWindow = ImVec4(
 				1.0f,
-				1.0f,
+				23.0f,
 				width * 0.24f,
 				height * 0.65f
 			);
@@ -337,6 +333,35 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 	Initialize();
 
+	//Initialize RenderDoc handle
+	std::wstring wPath;
+
+	if (g_bUseRenderdoc && GetRenderDocLoc(wPath))
+	{
+		std::string path(wPath.length(), ' ');
+		std::copy(wPath.begin(), wPath.end(), path.begin());
+		
+		if (RenderdocCheck(path))
+		{
+			HINSTANCE hinstLib;
+			hinstLib = LoadLibraryW(wPath.c_str());
+
+			if (hinstLib != nullptr)
+			{
+				HMODULE mod = GetModuleHandleW(wPath.c_str());
+				if (mod)
+				{
+					pRENDERDOC_GetAPI RENDERDOC_GetAPI =
+						(pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
+					int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **)&g_rdoc_api);
+					assert(ret == 1);
+
+					g_rdoc_api->SetCaptureFilePathTemplate((std::string(PROJECT_PATH) + g_strProject + std::string(WEASEL_CAPTURE)).c_str());
+				}
+			}
+		}
+	}
+
 	if (FAILED(InitWindow(hInstance, nCmdShow)))
 		return 0;
 
@@ -375,10 +400,14 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			PIXBeginEvent(PIX_COLOR_INDEX(col++), "MainLoop");
 			{
 				// Possibly change project
-				if (g_bNewProjLoad)
+				if (g_bNewProjLoaded)
 				{
+					for (int j = 0; j < MAX_RESORCESCHANNELS; j++)
+						g_piBufferUsed[j] = false;
+
 					LoadProject();
-					g_bNewProjLoad = false;
+					g_bNewProjLoaded = false;
+					ReloadShaders();
 				}
 
 				// Render the ShaderToy image
@@ -388,18 +417,22 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				}
 				PIXEndEvent(); // RENDER
 
-				if (!g_bFullscreen)
+				if (!g_bExpandedImage)
 				{
 					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiSetup");
 					{
+						D3DPERF_BeginEvent(0x0000ff, L"Main - ImGui Setup");
 						ImGuiSetup(hInstance);
+						D3DPERF_EndEvent();
 					}
 					PIXEndEvent(); // IMGUISETUP
 
 
 					PIXBeginEvent(PIX_COLOR_INDEX(col++), "ImGuiRender");
 					{
+						D3DPERF_BeginEvent(0x0000ff, L"Main - ImGui Render");
 						ImGuiRender();
+						D3DPERF_EndEvent();
 					}
 					PIXEndEvent();
 				}
@@ -506,7 +539,7 @@ void GoFullscreen()
 	g_vWindowSize.x = (float)desktop.right;
 	g_vWindowSize.y = (float)desktop.bottom;
 
-	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, g_pDepthStencilView);
 
 	Resize((float)desktop.right, (float)desktop.bottom);
 
@@ -546,7 +579,7 @@ void GoWindowed()
 	g_vWindowSize.x = (float)desktop.right;
 	g_vWindowSize.y = (float)desktop.bottom;
 
-	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+	g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, g_pDepthStencilView);
 
 	Resize((float)desktop.right, (float)desktop.bottom);
 
@@ -582,7 +615,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wParam)
 		{
 			case VK_F11:
-				g_bFullscreen = !g_bFullscreen;
+				g_bExpandedImage = !g_bExpandedImage;
 				g_bNeedsResize = true;
 				break;
 			case VK_F5:
@@ -590,12 +623,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				if (g_bCtrl)
 				{
 					g_fGameT = 0;
-					delete g_pTexturelib;
-					g_pTexturelib = nullptr;
 
-					g_pTexturelib = new TextureLib();
-					g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
-					g_pTexturelib->m_bReload = true;
+					ReloadTextures();
 				}
 				ReloadShaders();
 				break;
@@ -608,8 +637,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				g_bCtrl = true;
 				break;
 			case VK_ESCAPE:
-				if (g_bFullscreen)
-					g_bFullscreen = false;
+				if (g_bExpandedImage)
+					g_bExpandedImage = false;
 
 				g_bNeedsResize = true;
 				break;
@@ -721,10 +750,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(newClick - g_tLastClick);
 		if (time_span.count() < 0.3)
 		{
-			if (g_bFullscreen)
-				g_bFullscreen = false;
+			if (g_bExpandedImage)
+				g_bExpandedImage = false;
 			else if(g_bTrackMouse)
-				g_bFullscreen = true;
+				g_bExpandedImage = true;
 
 			g_bNeedsResize = true;
 		}
@@ -787,7 +816,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			g_vWindowSize.x = (float)width;
 			g_vWindowSize.y = (float)height;
 
-			g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, NULL);
+			g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, g_pDepthStencilView);
 		}
 
 		g_vAppSize.right = width + g_vAppSize.left;
@@ -917,15 +946,34 @@ HRESULT InitDevice()
 
 	D3D11_BLEND_DESC blendState;
 	ZeroMemory(&blendState, sizeof(D3D11_BLEND_DESC));
-	blendState.RenderTarget[0].BlendEnable = FALSE;
-	blendState.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	hr = g_pd3dDevice->CreateBlendState(&blendState, &g_pBlendState);
+	// Create an alpha enabled blend state description.
+	blendState.RenderTarget[0].BlendEnable = TRUE;
+	//blendStateDescription.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+	blendState.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	blendState.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	blendState.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blendState.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blendState.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blendState.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blendState.RenderTarget[0].RenderTargetWriteMask = 0x0f;
+
+	hr = g_pd3dDevice->CreateBlendState(&blendState, &g_pAlphaEnableBlendingState);
+	if (FAILED(hr))
+		return hr;
+
+	// Modify the description to create an alpha disabled blend state description.
+	blendState.RenderTarget[0].BlendEnable = FALSE;
+
+	// Create the blend state using the description.
+	hr = g_pd3dDevice->CreateBlendState(&blendState, &g_pAlphaDisableBlendingState);
+	if (FAILED(hr))
+		return hr;
 
 	FLOAT BlendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 	UINT SampleMask = 0xffffffff;
 
-	g_pImmediateContext->OMSetBlendState(g_pBlendState, BlendFactor, SampleMask);
+	g_pImmediateContext->OMSetBlendState(g_pAlphaDisableBlendingState, BlendFactor, SampleMask);
 
 	// Setup the viewport
 	D3D11_VIEWPORT vp;
@@ -943,9 +991,10 @@ HRESULT InitDevice()
 	std::wstring g_strProjectW(g_strProject.length(), L' '); // Make room for characters
 	 // Copy string to wstring.
 	std::copy(g_strProject.begin(), g_strProject.end(), g_strProjectW.begin());
-	hr = CompileShaderFromFile(((std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", "vs_4_0", &pVSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", "vs_5_0", &pVSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
+		SetForegroundWindow(g_hWnd);
 		MessageBox(g_hWnd,
 			(LPCSTR)"Error with the vertex shader.", (LPCSTR)"Error", MB_OK);
 		return hr;
@@ -982,19 +1031,23 @@ HRESULT InitDevice()
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
 		{
 			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
 
+			SetForegroundWindow(g_hWnd);
 			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
 
-		MessageBox(g_hWnd,
-			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+		SetForegroundWindow(g_hWnd);
+
+		// Trying without a pop-up box
+		//MessageBox(g_hWnd,
+		//	(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 	}
 
 	// Create the pixel shader
@@ -1004,7 +1057,8 @@ HRESULT InitDevice()
 
 	SetDebugObjectName(g_pPixelShader, "PixelShader");
 
-	hr = D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&g_pPixelShaderReflection);
+	hr = Reflection::D3D11ReflectionSetup(pPSBlob, &g_pPixelShaderReflection);
+
 	if (FAILED(hr))
 	{
 		return hr;
@@ -1065,7 +1119,9 @@ HRESULT InitDevice()
 
 	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
 
-	ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, std::vector<CustomizableBuffer>());
+	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, std::vector<CustomizableBuffer>());
+
+	Reflection::D3D11ShaderReflection(g_pPixelShaderReflection, g_Resource, g_dwShaderFlags);
 
 	bd.ByteWidth = (g_iCustomizableBufferSize / 16 + 1) * 16;
 	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
@@ -1128,7 +1184,7 @@ HRESULT InitResources(bool bLoadTextures)
 	HRESULT hr = S_OK;
 	int size = 0;
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		// Initializing all the buffers but they have the active flag set to false
 		g_Buffers[i] = Buffer();
@@ -1144,8 +1200,18 @@ HRESULT InitResources(bool bLoadTextures)
 	if (!LoadChannels((std::string(PROJECT_PATH) + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
 		return S_FALSE;
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
+		// Initialize all buffers
+		RECT rc;
+		GetClientRect(g_hWnd, &rc);
+		UINT width = rc.right - rc.left;
+		UINT height = rc.bottom - rc.top;
+
+		// Initialize buffer
+		g_Buffers[i].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_dwShaderFlags, g_strProject.c_str(), g_piBufferUsed, width, height, i);
+
+
 		if (g_Channels[i].m_Type == Channels::ChannelType::E_Texture)
 		{
 			g_Resource[i].m_Type = Channels::ChannelType::E_Texture;
@@ -1157,20 +1223,12 @@ HRESULT InitResources(bool bLoadTextures)
 		}
 		else if (g_Channels[i].m_Type == Channels::ChannelType::E_Buffer)
 		{
-			RECT rc;
-			GetClientRect(g_hWnd, &rc);
-			UINT width = rc.right - rc.left;
-			UINT height = rc.bottom - rc.top;
-
 			g_Resource[i].m_Type = Channels::ChannelType::E_Buffer;
-
-			// Initialize buffer
-			g_Buffers[static_cast<int>(g_Channels[i].m_BufferId)].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_Buffers, g_strProject.c_str(), width, height, g_Channels[i].m_BufferId);
 
 			g_Resource[i].m_vChannelRes = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
 			g_Resource[i].m_iBufferIndex = static_cast<int>(g_Channels[i].m_BufferId);
 
-			g_Buffers[static_cast<int>(g_Channels[i].m_BufferId)].SetShaderResource(g_pImmediateContext, i);
+			g_piBufferUsed[g_Resource[i].m_iBufferIndex] += 1;
 		}
 		else
 		{
@@ -1178,7 +1236,7 @@ HRESULT InitResources(bool bLoadTextures)
 		}
 
 		// Create Sampler
-		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, g_Channels[i], -1, i);
+		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, g_Channels[i], 0, i);
 	}
 
 	return S_OK;
@@ -1191,11 +1249,11 @@ HRESULT InitResources(bool bLoadTextures)
 void Resize(const float width, const float height)
 {
 	// Updating the texture size per buffer
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
-			if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+			if (g_vPadding.x < width && g_vPadding.y < height && !g_bExpandedImage && !g_bFullWindow)
 			{
 				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
 
@@ -1219,7 +1277,7 @@ void Resize(const float width, const float height)
 	g_pDepthStencilState->Release();
 	g_pDepthStencilBuffer->Release();
 
-	if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+	if (g_vPadding.x < width && g_vPadding.y < height && !g_bExpandedImage && !g_bFullWindow)
 	{
 		Create2DTexture(g_pd3dDevice, &g_pRenderTargetTexture, &g_pRenderTargetView, &g_pShaderResourceView, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
 		CreateDepthStencilView(g_pd3dDevice, &g_pDepthStencilView, &g_pDepthStencilState, &g_pDepthStencilBuffer, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
@@ -1235,7 +1293,7 @@ void Resize(const float width, const float height)
 
 	// Resizing the viewport
 	D3D11_VIEWPORT vp;
-	if (g_vPadding.x < width && g_vPadding.y < height && !g_bFullscreen && !g_bFullWindow)
+	if (g_vPadding.x < width && g_vPadding.y < height && !g_bExpandedImage && !g_bFullWindow)
 	{
 		vp.Width = (width - g_vPadding.x);
 		vp.Height = (height - g_vPadding.y);
@@ -1273,7 +1331,7 @@ void AutoReload()
 
 	std::string path = std::string(PROJECT_PATH) + g_strProject;
 
-	for (int i = 0; i < MAX_RESORCES + 1; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS + 1; ++i)
 	{
 		if (_stat((path + std::string(filename[i])).c_str(), &result) == 0)
 		{
@@ -1302,12 +1360,27 @@ void ClearColourFade()
 		&& (g_vClearColour.w == g_vClearColourFade.w))
 		return;
 
-
-	// TODO - base off time
 	g_vClearColour.x -= ((g_vClearColour.x - g_vClearColourFade.x) * 2.0f * GetImGuiDeltaTime());
 	g_vClearColour.y -= ((g_vClearColour.y - g_vClearColourFade.y) * 2.0f * GetImGuiDeltaTime());
 	g_vClearColour.z -= ((g_vClearColour.z - g_vClearColourFade.z) * 2.0f * GetImGuiDeltaTime());
 	g_vClearColour.w -= ((g_vClearColour.w - g_vClearColourFade.w) * 2.0f * GetImGuiDeltaTime());
+}
+
+void ClearShaderResource(ID3D11DeviceContext* pImmediateContext, ID3D11DepthStencilView* pDepthStencilView)
+{
+	D3DPERF_BeginEvent(0xff0000, L"Main - Clearing Shader Resource");
+	// Clearing the Shader Resource so it's not bound on clear
+	ID3D11ShaderResourceView* renderNull = nullptr;
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
+		pImmediateContext->PSSetShaderResources(i, 1, &renderNull);
+
+	ID3D11RenderTargetView* viewNull = nullptr;
+	pImmediateContext->OMSetRenderTargets(1, &viewNull, pDepthStencilView);
+
+	if (renderNull) renderNull->Release();
+	if (viewNull) viewNull->Release();
+
+	D3DPERF_EndEvent();
 }
 
 
@@ -1316,14 +1389,20 @@ void ClearColourFade()
 //--------------------------------------------------------------------------------------
 void Render()
 {
-	if(g_bAutoReload)
+	D3DPERF_BeginEvent(0x00ff00, L"Main - Begin Render");
+
+	if (g_bAutoReload)
+	{
+		D3DPERF_BeginEvent(0xff0000, L"Main - Reloading");
 		AutoReload();
+		D3DPERF_EndEvent();
+	}
 
 	ClearColourFade();
 
 	if (g_pTexturelib->m_bReload)
 	{
-		for (int i = 0; i < MAX_RESORCES; ++i)
+		for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 		{
 			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
 			{
@@ -1337,61 +1416,69 @@ void Render()
 		g_pTexturelib->m_bReload = false;
 	}
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		// Update buffers
-		if (g_Buffers[i].m_bIsActive)
+		if (g_piBufferUsed[i])
 		{
 			// Update the buffer frames
+			D3DPERF_BeginEvent(0xff0000, L"Main - Render Buffer");
 			g_Buffers[i].Render(g_Buffers, g_pImmediateContext, g_pDepthStencilView, g_pCBNeverChanges, ARRAYSIZE(g_Indicies), (UINT)g_vCurrentWindowSize.x, (UINT)g_vCurrentWindowSize.y, i);
+			D3DPERF_EndEvent();
 		}
 	}
 
-	if (g_iPadding == 0)
+	D3DPERF_BeginEvent(0xff0000, L"Main - Setting Shader Resources");
+	if (!g_bExpandedImage || g_iLocation == 0)
 	{
-		for (int i = 0; i < MAX_RESORCES; ++i)
+		for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 		{
-			// Bind the correct textures and buffer resources
-			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
-				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Resource[i].m_pShaderResource);
-			else if (g_Resource[i].m_Type == Channels::ChannelType::E_Buffer)
+			if (g_Resource[i].m_iTextureSlot >= 0)
 			{
-				g_pImmediateContext->PSSetShaderResources(i, 1, &g_Buffers[(int)g_Resource[i].m_iBufferIndex].m_pShaderResourceView);
+				// Bind the correct textures and buffer resources
+				if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
+					g_pImmediateContext->PSSetShaderResources(g_Resource[i].m_iTextureSlot, 1, &g_Resource[i].m_pShaderResource);
+				else if (g_Resource[i].m_Type == Channels::ChannelType::E_Buffer)
+					g_pImmediateContext->PSSetShaderResources(g_Resource[i].m_iTextureSlot, 1, &g_Buffers[(int)g_Resource[i].m_iBufferIndex].m_pShaderResourceView);
 			}
 		}
 	}
 	else
 	{
-		for (int i = 0; i < MAX_RESORCES; ++i)
+		for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 		{
-			if (g_Buffers[g_iPadding - 1].m_Res[i].m_Type == Channels::ChannelType::E_Texture)
-				g_pImmediateContext->PSSetShaderResources(i + g_iPadding * MAX_RESORCES, 1, &g_Buffers[g_iPadding - 1].m_Res[i].m_pShaderResource);
-			if (g_Buffers[g_iPadding - 1].m_Res[i].m_Type == Channels::ChannelType::E_Buffer)
-				g_pImmediateContext->PSSetShaderResources(i + g_iPadding * MAX_RESORCES, 1, &g_Buffers[g_Buffers[g_iPadding - 1].m_Res[i].m_iBufferIndex].m_pShaderResourceView);
+			if (g_Resource[i].m_iTextureSlot >= 0)
+			{
+				if (g_Buffers[g_iLocation - 1].m_Res[i].m_Type == Channels::ChannelType::E_Texture)
+					g_pImmediateContext->PSSetShaderResources(g_Resource[i].m_iTextureSlot, 1, &g_Buffers[g_iLocation - 1].m_Res[i].m_pShaderResource);
+				else if (g_Buffers[g_iLocation - 1].m_Res[i].m_Type == Channels::ChannelType::E_Buffer)
+					g_pImmediateContext->PSSetShaderResources(g_Resource[i].m_iTextureSlot, 1, &g_Buffers[g_Buffers[g_iLocation - 1].m_Res[i].m_iBufferIndex].m_pShaderResourceView);
+			}
 		}
 	}
+	D3DPERF_EndEvent();
 
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
 	g_pImmediateContext->PSSetShader(g_pPixelShader, nullptr, 0);
 
-	if (!g_bFullscreen)
+	if (!g_bExpandedImage)
 		g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
 	else
 	{
-		RECT window;
-		GetWindowRect(g_hWnd, &window);
+		RECT rcClient;
+		GetClientRect(g_hWnd, &rcClient);
 
 		if (g_bNeedsResize)
 		{
-			Resize((float)(window.right - window.left), (float)(window.bottom - window.top));
+			Resize((float)(rcClient.right - rcClient.left), (float)(rcClient.bottom - rcClient.top));
 			g_bNeedsResize = false;
 		}
 
-		if(g_iPadding != 0)
-			g_pImmediateContext->PSSetShader(g_Buffers[g_iPadding - 1].m_pPixelShader, nullptr, 0);
+		if(g_iLocation != 0)
+			g_pImmediateContext->PSSetShader(g_Buffers[g_iLocation - 1].m_pPixelShader, nullptr, 0);
 		
-		g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, nullptr);
+		g_pImmediateContext->OMSetRenderTargets(1, &g_pBackBufferRenderTargetView, g_pDepthStencilView);
 	}
 
 	// Get time
@@ -1422,7 +1509,7 @@ void Render()
 	}
 
 	// Clear the back buffer 
-	if (!g_bFullscreen)
+	if (!g_bExpandedImage)
 		g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, DirectX::Colors::MidnightBlue);
 	else
 		g_pImmediateContext->ClearRenderTargetView(g_pBackBufferRenderTargetView, DirectX::Colors::MidnightBlue);
@@ -1434,7 +1521,7 @@ void Render()
 	cb.m_iFrame = g_iFrame++;
 	if (g_bTrackMouse)
 	{
-		if (g_bMouseMoved)
+		if (g_bMouseMoved && !g_bExpandedImage)
 		{
 			g_vMouse.x -= g_vImageOffset.x;
 			g_vMouse.y -= g_vImageOffset.y;
@@ -1493,13 +1580,13 @@ void Render()
 		{
 			if (g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT)
 			{
-				for (int j = 0; j < g_vCustomizableBuffer[i].size / SIZE_OF_FLOAT; ++j)
-					((float*)customizableBufferData)[g_vCustomizableBuffer[i].offset / SIZE_OF_FLOAT + j] = ((float*)g_vCustomizableBuffer[i].data)[j];
+				for (int j = 0; j < g_vCustomizableBuffer[i].size / sizeof(float); ++j)
+					((float*)customizableBufferData)[g_vCustomizableBuffer[i].offset / sizeof(float) + j] = ((float*)g_vCustomizableBuffer[i].data)[j];
 			}
 			else if (g_vCustomizableBuffer[i].type == D3D_SVT_INT)
 			{
-				for (int j = 0; j < g_vCustomizableBuffer[i].size / SIZE_OF_INT; ++j)
-					((int*)customizableBufferData)[g_vCustomizableBuffer[i].offset / SIZE_OF_INT + j] = ((int*)g_vCustomizableBuffer[i].data)[j];
+				for (int j = 0; j < g_vCustomizableBuffer[i].size / sizeof(int); ++j)
+					((int*)customizableBufferData)[g_vCustomizableBuffer[i].offset / sizeof(int) + j] = ((int*)g_vCustomizableBuffer[i].data)[j];
 			}
 			else
 			{
@@ -1521,7 +1608,12 @@ void Render()
 	PIXSetMarker(PIX_COLOR_INDEX((byte)256), "Drawing Triangles");
 
 	// Draw th triangles that make up the window
+	D3DPERF_BeginEvent(0xff0000, L"Main - Render Main");
 	g_pImmediateContext->DrawIndexed(ARRAYSIZE(g_Indicies), 0, 0);
+	D3DPERF_EndEvent();
+
+	ClearShaderResource(g_pImmediateContext, nullptr);
+	D3DPERF_EndEvent();
 }
 
 //--------------------------------------------------------------------------------------
@@ -1544,14 +1636,27 @@ void CleanupDevice()
 {
 	// Save Imgui state
 	ImGui::SaveIniSettingsToDisk("imgui.ini");
-	WriteIni(g_strProject.c_str(), g_strDefaultEditor.c_str(), g_vClearColour, g_vAppSize, static_cast<int>(g_eDefaultEditor), g_bAutoReload);
+	WriteIni(g_strProject.c_str(), g_strDefaultEditor.c_str(), g_vClearColour, g_vAppSize, g_dwShaderFlags, static_cast<int>(g_eDefaultEditor), g_bAutoReload, g_bUseRenderdoc);
 	ULONG refs = 0;
 	// revert fullscreen before closing
 	g_pSwapChain->SetFullscreenState(FALSE, NULL);
 
+	if (g_rdoc_api != nullptr)
+	{
+		g_rdoc_api->Shutdown();
+
+		// Extra ones created by initializing Renderdoc
+		g_pAlphaEnableBlendingState->Release();
+		g_pAlphaDisableBlendingState->Release();
+
+		g_pDepthStencilState->Release();
+
+		g_pImmediateContext->Release();
+	}
+
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 		{
@@ -1568,7 +1673,8 @@ void CleanupDevice()
 		}
 	}
 
-	g_pTexturelib->Release();
+	delete g_pTexturelib;
+	g_pTexturelib = nullptr;
 
 	SAFE_RELEASE(g_pCBNeverChanges);
 
@@ -1589,8 +1695,11 @@ void CleanupDevice()
 	SAFE_RELEASE(g_pShaderResourceView);
 
 	SAFE_RELEASE(g_pBackBufferRenderTargetView);
+
 	SAFE_RELEASE(g_pDepthStencilState);
-	SAFE_RELEASE(g_pBlendState);
+
+	SAFE_RELEASE(g_pAlphaEnableBlendingState);
+	SAFE_RELEASE(g_pAlphaDisableBlendingState);
 	SAFE_RELEASE(g_pSwapChain);
 	SAFE_RELEASE(g_pImmediateContext);
 
@@ -1643,14 +1752,17 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_fDeltaT, g_fDPIscale,
 		g_iFrame, buttonPress,
 		g_bResChanged,
-		g_bNewProjLoad,
+		g_bNewProjLoaded,
 		g_bDefaultEditorSelected,
 		g_bFullWindow,
 		bGoFullChange,
 		g_bVsync,
+		g_bGrabbingFrame,
+		g_bUseRenderdoc,
 		g_vControlWindow,
 		g_vMainImageWindow,
-		g_vCustomizableBuffer
+		g_vCustomizableBuffer,
+		&g_rdoc_api
 	);
 
 	if (bGoFullChange)
@@ -1662,8 +1774,10 @@ void ImGuiSetup(HINSTANCE hInstance)
 			GoWindowed();
 	}
 
-	if (buttonPress & 0x0001)
+	if (buttonPress & MASK_RELOAD_SHADERS)
 		ReloadShaders();
+	if (buttonPress & MASK_RELOAD_TEXTURES)
+		ReloadTextures();
 
 	int iHovered = -1;
 
@@ -1678,20 +1792,22 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_Resource, 
 		g_Buffers, 
 		g_Channels, 
-		g_pTexturelib, 
+		g_pTexturelib,
+		g_dwShaderFlags,
 		g_strProject.c_str(), 
 		g_fDPIscale, 
-		g_iPadding, 
+		g_piBufferUsed,
+		g_iLocation,
 		g_iPressIdentifier, 
-		iHovered, 
+		iHovered,
 		g_bResChanged, 
-		g_bNewProjLoad,
+		g_bNewProjLoaded,
 		g_vWindowSize,
 		g_vResourceWindow
 	);
 
 	// Box for ShaderToy image to be displayed in
-	if ((((int)g_vCurrentWindowSize.x != (int)g_vWindowSize.x && (int)g_vCurrentWindowSize.y != (int)g_vWindowSize.y) || g_bResChanged) && !g_bFullscreen)
+	if ((((int)g_vCurrentWindowSize.x != (int)g_vWindowSize.x && (int)g_vCurrentWindowSize.y != (int)g_vWindowSize.y) || g_bResChanged) && !g_bExpandedImage)
 	{
 		if (g_vWindowSize.x > 0.0f && g_vWindowSize.y > 0.0f && g_vMainImageWindow.z > 0.0f && g_vMainImageWindow.w > 0.0f)
 		{
@@ -1718,9 +1834,10 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_strProject.c_str(),
 		g_strDefaultEditor,
 		g_eDefaultEditor,
-		g_iPadding, iHovered,
+		g_piBufferUsed,
+		g_iLocation, iHovered,
 		g_fDPIscale,
-		g_bTrackMouse, g_bFullscreen,
+		g_bTrackMouse, g_bExpandedImage,
 		g_bResChanged, g_vMainImageWindow);
 
 	// We don't want the ImGui windows to go outside the app window
@@ -1737,6 +1854,13 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_vShaderErrorWindow
 	);
 
+	if (MenuBar(
+		g_pImmediateContext,
+		g_pAlphaEnableBlendingState,
+		g_pAlphaDisableBlendingState,
+		g_dwShaderFlags))
+		ReloadShaders();
+
 	// Selection of default editor
 	if (!g_bDefaultEditorSelected)
 	{	
@@ -1745,6 +1869,11 @@ void ImGuiSetup(HINSTANCE hInstance)
 		Barrier(size);
 		ImGui::SetNextWindowFocus();
 		DefaultEditorSelector(ImVec2(size.x / 2, size.y / 2), g_eDefaultEditor, g_strDefaultEditor, g_bDefaultEditorSelected);
+	}
+
+	if (g_bExpandedImage)
+	{
+		g_bTrackMouse = true;
 	}
 
 	g_bResChanged = false;
@@ -1759,10 +1888,10 @@ void ReloadShaders()
 
 	g_vClearColourFade = g_vClearColour;
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
-			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, g_strProject.c_str(), i);
+			g_Buffers[i].ReloadShader(g_pd3dDevice, g_pVertexShader, g_dwShaderFlags, g_strProject.c_str(), i);
 	}
 
 	// Make room for characters
@@ -1775,12 +1904,15 @@ void ReloadShaders()
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
 	g_vShaderErrorList.clear();
-	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
-		MessageBox(g_hWnd,
-			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+		SetForegroundWindow(g_hWnd);
+		// Trying without a pop-up box
+		/*MessageBox(g_hWnd,
+			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);*/
 	}
+
 
 	g_pPixelShader->Release();
 	g_pPixelShader = nullptr;
@@ -1789,12 +1921,13 @@ void ReloadShaders()
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
 	if (FAILED(hr))
 	{
+		SetForegroundWindow(g_hWnd);
 		MessageBox(g_hWnd,
 			(LPCSTR)"Error creating pixel shader.", (LPCSTR)"Error", MB_OK);
 		return;
 	}
 
-	if (FAILED(D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)&g_pPixelShaderReflection)))
+	if (FAILED(Reflection::D3D11ReflectionSetup(pPSBlob, &g_pPixelShaderReflection)))
 	{
 		return;
 	}
@@ -1816,7 +1949,9 @@ void ReloadShaders()
 	// Read the shader
 	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
 
-	ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, customizableBufferCopy);
+	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, customizableBufferCopy);
+
+	Reflection::D3D11ShaderReflection(g_pPixelShaderReflection, g_Resource, g_dwShaderFlags);
 
 	D3D11_BUFFER_DESC bd = {};
 
@@ -1836,6 +1971,19 @@ void ReloadShaders()
 }
 
 //--------------------------------------------------------------------------------------
+// Reload the Texture Library
+//--------------------------------------------------------------------------------------
+void ReloadTextures()
+{
+	delete g_pTexturelib;
+	g_pTexturelib = nullptr;
+
+	g_pTexturelib = new TextureLib();
+	g_pTexturelib->ParallelLoadDDSTextures(g_pd3dDevice, "textures/*");
+	g_pTexturelib->m_bReload = true;
+}
+
+//--------------------------------------------------------------------------------------
 // Reload the Pixel Shaders
 //--------------------------------------------------------------------------------------
 HRESULT LoadProject()
@@ -1849,19 +1997,22 @@ HRESULT LoadProject()
 	// Load new pixel shader
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "main", "ps_4_0", &pPSBlob, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
 		{
 			std::string msg = "Error Pixel Shader \"shaders/PixelShader.hlsl\" not found!";
 
+			SetForegroundWindow(g_hWnd);
 			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
 
-		MessageBox(g_hWnd,
-			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
+		SetForegroundWindow(g_hWnd);
+		// Trying without a pop-up box
+		/*MessageBox(g_hWnd,
+			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);*/
 	}
 
 	// Create the pixel shader
@@ -1871,7 +2022,7 @@ HRESULT LoadProject()
 	if (FAILED(hr))
 		return hr;
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (g_Buffers[i].m_bIsActive)
 			g_Buffers[i].Release(i);
@@ -1879,6 +2030,10 @@ HRESULT LoadProject()
 		if (g_Resource[i].m_pSampler)
 			g_Resource[i].m_pSampler->Release();
 	}
+
+	// Change capture location
+	if (g_rdoc_api != nullptr)
+		g_rdoc_api->SetCaptureFilePathTemplate((std::string(PROJECT_PATH) + g_strProject + std::string(WEASEL_CAPTURE)).c_str());
 
 	InitResources(false);
 	Resize(g_vWindowSize.x, g_vWindowSize.y);

@@ -46,3 +46,26 @@ bool GetStringRegKey(
 
 	return bExistsAndSuccess;
 }
+
+bool GetRenderDocLoc(std::wstring& strValue)
+{
+	HKEY hKey;
+	const char* path = "SOFTWARE\\Classes\\CLSID\\{5D6BF029-A6BA-417A-8523-120492B1DCE3}\\InprocServer32";
+
+	const std::wstring		strValueName = L"";
+	const std::wstring		strStrDefaultValue = L"";
+
+	LONG lRes = RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &hKey);
+	bool bExistsAndSuccess(lRes == ERROR_SUCCESS);
+	bool bDoesNotExistsSpecifically(lRes == ERROR_FILE_NOT_FOUND);
+
+	if (bExistsAndSuccess && !bDoesNotExistsSpecifically)
+	{
+		GetStringRegKey(hKey, strValueName, strValue, strStrDefaultValue);
+		RegCloseKey(hKey);
+
+		return true;
+	}
+
+	return false;
+}

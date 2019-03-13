@@ -14,6 +14,8 @@
 #include "FileIO.h"
 #include "DDSTextureLoader.h"
 
+#define SINGLE_THREAD_LOADING false
+
 #define BUFFER_SIZE 20
 
 CONDITION_VARIABLE BufferNotEmpty;
@@ -81,41 +83,8 @@ TextureLib::~TextureLib()
 	delete[] m_pIsSet;
 	m_pIsSet = nullptr;
 
-	HeapFree(GetProcessHeap(), 0, m_pLoadData);
-}
-
-void TextureLib::Release()
-{ 
-	// Release resources used by the critical section object.
-	DeleteCriticalSection(&CriticalSection);
-
-	// Release all the DirectX resources
-	for (int i = 0; i < m_iLength; ++i)
-	{
-		delete[] m_ppPath[i];
-		m_ppPath[i] = nullptr;
-
-		ULONG refs = 0;
-		if (m_pShaderResource[i])
-			m_pShaderResource[i]->Release();
-		else
-			refs = 0;
-		if (refs > 0)
-		{
-			_RPTF2(_CRT_WARN, "TextureLib %s still has %i references.\n", m_ppPath[i], refs);
-		}
-	}
-
-	delete[] m_ppPath;
-	m_ppPath = nullptr;
-
-	delete[] m_pShaderResource;
-	m_pShaderResource = nullptr;
-
-	delete[] m_pIsSet;
-	m_pIsSet = nullptr;
-
-	HeapFree(GetProcessHeap(), 0, m_pLoadData);
+	delete m_pLoadData;
+	m_pLoadData = nullptr;
 }
 
 void TextureLib::Add(const char* textPath)
@@ -183,14 +152,13 @@ void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** s
 		{
 			if (m_pIsSet[i])
 				*shaderRes = m_pShaderResource[i];
-			else
-			{
-				*shaderRes = m_pShaderResource[0];
-				this->m_bReload = true;
-			}
+
 			return;
 		}
 	}
+
+	*shaderRes = m_pShaderResource[m_iLength - 1];
+	m_bReload = true;
 }
 
 void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** shaderRes, DirectX::XMFLOAT4& channelRes)
@@ -209,15 +177,14 @@ void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** s
 				channelRes = m_pResolution[i];
 				*shaderRes = m_pShaderResource[i];
 			}
-			else
-			{
-				channelRes = m_pResolution[0];
-				*shaderRes = m_pShaderResource[0];
-				this->m_bReload = true;
-			}
+
 			return;
 		}
 	}
+
+	channelRes = m_pResolution[m_iLength - 1];
+	*shaderRes = m_pShaderResource[m_iLength - 1];
+	m_bReload = true;
 }
 
 HRESULT TextureLib::LoadDefaultTexture(ID3D11Device* device)
@@ -225,14 +192,14 @@ HRESULT TextureLib::LoadDefaultTexture(ID3D11Device* device)
 	HRESULT hr = S_OK;
 
 	const char* path = "default.dds";
-	this->Add(path);
+	Add(path);
 
 	m_pShaderResource = new ID3D11ShaderResourceView*[m_iLength] { nullptr };
 	m_pResolution = new DirectX::XMFLOAT4[m_iLength];
 
-	hr = LoadTexture(device, &m_pShaderResource[0], this->m_ppPath[0], m_pResolution[0]);
+	hr = LoadTexture(device, &m_pShaderResource[0], m_ppPath[0], m_pResolution[0]);
 
-	this->m_pIsSet[0] = true;
+	m_pIsSet[0] = true;
 
 	return hr;
 }
@@ -250,6 +217,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 	{
 		{
 			PIXBeginEvent(PIX_COLOR_INDEX((byte)4), "Finding Textures");
+
 			do
 			{
 				const char* fileName = data.cFileName;
@@ -270,7 +238,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 						// do not want to load the default texture again
 						if (strcmp(fileName, "default.dds") != 0)
 							// this is a .dds texture
-							this->Add(fileName);
+							Add(fileName);
 					}
 				}
 			} while (FindNextFile(hFind, &data));
@@ -279,11 +247,10 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 		}
 	}
 
-	this->LoadDefaultTexture(device);
+	LoadDefaultTexture(device);
 
 	// If we have any textures then we want to load them
-
-	if (this->m_iLength > 0)
+	if (m_iLength > 0)
 	{
 		PIXBeginEvent(0, "ThreadedTextureLoading");
 		// Threaded version
@@ -293,14 +260,16 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 		DWORD   dwThreadIdArrayFile, dwThreadIdArrayTexture;
 		HANDLE threadFileLoad, threadTextureLoad;
 
-		m_pLoadData = (LoadData*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LoadData));
+		m_pLoadData = new LoadData();
 
 		m_pLoadData->device = device;
 		m_pLoadData->textureLib = this;
 
+#if SINGLE_THREAD_LOADING
 		// For single thread texture loading
 		//LoadTexturesSingleThread(device);
 
+#else
 		threadFileLoad = CreateThread(
 			NULL,                   // default security attributes
 			0,                      // use default stack size  
@@ -318,6 +287,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 			0,
 			&dwThreadIdArrayTexture
 		);
+#endif
 
 		PIXEndEvent(); // THREADEDTEXTURELOADING
 
@@ -333,13 +303,13 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 
 void TextureLib::LoadTexturesSingleThread(ID3D11Device* device)
 {
-	for (int i = 1; i < this->m_iLength; ++i)
+	for (int i = 1; i < m_iLength; ++i)
 	{
 		TextureMemory tm;
 
-		const size_t cSize = strlen(this->m_ppPath[i]) + 1;
+		const size_t cSize = strlen(m_ppPath[i]) + 1;
 		wchar_t* path = new wchar_t[cSize];
-		mbstowcs(path, this->m_ppPath[i], cSize);
+		mbstowcs(path, m_ppPath[i], cSize);
 
 		std::unique_ptr<uint8_t[]> ddsData;
 
@@ -356,14 +326,14 @@ void TextureLib::LoadTexturesSingleThread(ID3D11Device* device)
 			tm.bitData,
 			tm.bitSize,
 			nullptr,
-			&this->m_pShaderResource[tm.id]);
+			&m_pShaderResource[tm.id]);
 
 		uint32_t width = 0, height = 0;
 		DirectX::GetTextureInformation(path, width, height);
 
-		this->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+		m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
 
-		this->m_pIsSet[tm.id] = true;
+		m_pIsSet[tm.id] = true;
 
 		uint8_t* pDataPointer = ddsData.release();
 		delete pDataPointer;

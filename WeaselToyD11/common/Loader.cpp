@@ -158,6 +158,8 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 	if(size != 0)
 		channels[i-1] = ch;
 
+	inputFile.close();
+
 	return true;
 }
 
@@ -262,7 +264,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 	fprintf(file, "########## Texture Controls #############\n");
 
 	int size = 0;
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (channels[i].m_strTexture[0] == 't')
 			size++;
@@ -270,7 +272,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 
 	fprintf(file, "s %i\n\n", size);
 
-	for (int i = 0; i < MAX_RESORCES; ++i)
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		if (channels[i].m_Type >= 0)
 		{
@@ -291,7 +293,7 @@ bool WriteChannel(const char* channelPath, Channel* channels)
 // Write settings.ini file
 ////////////////////////////////////////////////
 
-bool WriteIni(const char* strProj, const char* strEditor, ImVec4 vColor, RECT vAppSize, int iEditor, bool autoReload)
+bool WriteIni(const char* strProj, const char* strEditor, ImVec4 vColor, RECT vAppSize, DWORD shaderFlags, int iEditor, bool autoReload, bool bRenderdoc)
 {
 	FILE* file;
 
@@ -304,6 +306,8 @@ bool WriteIni(const char* strProj, const char* strEditor, ImVec4 vColor, RECT vA
 	fprintf(file, "autoReload: %d\n", autoReload);
 	fprintf(file, "bgColor: %f %f %f %f\n", vColor.x, vColor.y, vColor.w, vColor.z);
 	fprintf(file, "appSize: %d %d %d %d\n", vAppSize.left, vAppSize.right, vAppSize.top, vAppSize.bottom);
+	fprintf(file, "shaderFlags: %ld\n", shaderFlags);
+	fprintf(file, "renderdocFlag: %d\n", bRenderdoc);
 
 	fclose(file);
 
@@ -320,7 +324,7 @@ void GetEditorHelper(const std::string line, std::string& editor)
 	editor = line.substr(index + 1);
 }
 
-bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT& vAppSize, int& iEditor, bool& autoReload)
+bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT& vAppSize, DWORD& shaderFlags, int& iEditor, bool& autoReload, bool& bRenderdoc)
 {
 	// Open file
 	std::ifstream inputFile("settings.ini", std::ios::in);
@@ -337,28 +341,71 @@ bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT&
 	char dummy[MAX_PATH] = "";
 	char proj[MAX_PATH] = "";
 	char editor[MAX_PATH] = "";
-	int enumer = 1;
+	int autRld = 1;
+	int useRenderdoc = 0;
 
-	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %s\n", &dummy, &proj);
+	while (inputFile.getline(line, MAX_PATH))
+	{
+		sscanf(line, "%s", &dummy);
 
-	inputFile.getline(line, MAX_PATH);
-	GetEditorHelper(line, strEditor);
+		if (strcmp(dummy, "project:") == 0)
+			sscanf(line, "%s %s\n", &dummy, &proj);
 
-	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %i\n", &dummy, &iEditor);
+		else if (strcmp(dummy, "editor:") == 0)
+			GetEditorHelper(line, strEditor);
 
-	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %i\n", &dummy, &enumer);
+		else if (strcmp(dummy, "editorEnum:") == 0)
+			sscanf(line, "%s %i\n", &dummy, &iEditor);
 
-	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %f %f %f %f\n", &dummy, &vColor.x, &vColor.y, &vColor.w, &vColor.z);
+		else if (strcmp(dummy, "autoReload:") == 0)
+			sscanf(line, "%s %i\n", &dummy, &autRld);
 
-	inputFile.getline(line, MAX_PATH);
-	sscanf(line, "%s %d %d %d %d\n", &dummy, &vAppSize.left, &vAppSize.right, &vAppSize.top, &vAppSize.bottom);
+		else if (strcmp(dummy, "bgColor:") == 0)
+			sscanf(line, "%s %f %f %f %f\n", &dummy, &vColor.x, &vColor.y, &vColor.w, &vColor.z);
+
+		else if (strcmp(dummy, "appSize:") == 0)
+			sscanf(line, "%s %d %d %d %d\n", &dummy, &vAppSize.left, &vAppSize.right, &vAppSize.top, &vAppSize.bottom);
+
+		else if (strcmp(dummy, "shaderFlags:") == 0)
+			sscanf(line, "%s %ld", &dummy, &shaderFlags);
+
+		else if (strcmp(dummy, "renderdocFlag:") == 0)
+			sscanf(line, "%s %i", &dummy, &useRenderdoc);
+	}
 
 	strProj = std::string(proj);
-	autoReload = enumer == 1 ? true : false;
+	autoReload = autRld == 1 ? true : false;
+	bRenderdoc = useRenderdoc == 1 ? true : false;
+
+	inputFile.close();
 
 	return true;
+}
+
+bool RenderdocCheck(std::string dllLocation)
+{
+	int substringEnd = dllLocation.find("renderdoc.dll");
+
+	std::string path = dllLocation.substr(0, substringEnd);
+
+	path += std::string("renderdoc_app.h");
+
+	std::ifstream inputFile(path, std::ios::in);
+
+	char line[256];
+
+	while (inputFile.getline(line, 256))
+	{
+		std::string check = std::string(line);
+
+		int isFound = check.find("API_1_3");
+		if (isFound >= 0)
+		{
+			inputFile.close();
+			return true;
+		}
+	}
+
+	inputFile.close();
+	return false;
 }

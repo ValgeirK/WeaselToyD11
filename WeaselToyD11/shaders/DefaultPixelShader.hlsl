@@ -16,7 +16,7 @@ cbuffer cbCustomisable : register (b2)
 	// slider colour min -1.0 max 1.0
 };
 
-float4 main(PS_INPUT input) : SV_Target
+float4 mainImage(PS_INPUT input) : SV_Target
 {
 	// Normalized pixel coordinates (from 0 to 1)
     float2 uv = fragCoord/iResolution.xy;

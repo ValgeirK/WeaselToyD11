@@ -2,6 +2,8 @@
 
 #include <directxcolors.h>
 
+#include "HashDefines.h"
+
 namespace Types
 {
 	enum VarType
@@ -13,7 +15,7 @@ namespace Types
 
 struct CBNeverChanges
 {
-	DirectX::XMFLOAT4 ChannelResolution[4];
+	DirectX::XMFLOAT4 ChannelResolution[MAX_RESORCESCHANNELS];
 	DirectX::XMFLOAT4 Resolution;
 };
 
@@ -53,16 +55,16 @@ struct CustomizableBuffer
 
 		if (type == 2) // INT
 		{
-			data = new int[size / 4];
+			data = new int[size / sizeof(int)];
 
-			for (int i = 0; i < size / 4; ++i)
+			for (int i = 0; i < size / sizeof(int); ++i)
 				((int*)data)[i] = ((int*)cb.data)[i];
 		}
 		else if (type == 3) // FLOAT
 		{
-			data = new float[size / 4];
+			data = new float[size / sizeof(float)];
 
-			for (int i = 0; i < size / 4; ++i)
+			for (int i = 0; i < size / sizeof(float); ++i)
 				((float*)data)[i] = ((float*)cb.data)[i];
 		}
 	}

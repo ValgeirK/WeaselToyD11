@@ -6,10 +6,16 @@
 
 struct ImVec2;
 struct ImVec4;
-typedef int ImGuiWindowFlags;
 struct ID3D11Texture2D;
 struct Channel;
 struct CustomizableBuffer;
+struct ID3D11BlendState;
+
+struct RENDERDOC_API_1_3_0;
+typedef RENDERDOC_API_1_3_0 RENDERDOC_API_1_1_2;
+
+typedef int ImGuiWindowFlags;
+typedef unsigned long DWORD;
 
 #include <vector>
 #include <string.h>
@@ -80,10 +86,11 @@ void ControlWindow(
 	float, float,
 	int, int&,
 	bool&, bool&, bool&, bool,
-	bool&, bool&,
+	bool&, bool&, bool&, bool&,
 	ImVec4&,
 	ImVec4&,
-	std::vector<CustomizableBuffer>&
+	std::vector<CustomizableBuffer>&,
+	RENDERDOC_API_1_1_2**
 );
 
 void MainImageWindow(
@@ -98,6 +105,7 @@ void MainImageWindow(
 	const char*,
 	std::string,
 	ImGuiEnum::DefaultEditor,
+	int*,
 	int&,
 	int,
 	float,
@@ -115,9 +123,11 @@ void ResourceWindow(
 	Buffer*,
 	Channel*,
 	TextureLib*,
+	DWORD,
 	const char*,
 	float,
-	int&, int&, int&, 
+	int*,
+	int&, int&, int&,
 	bool, bool&,
 	ImVec2,
 	ImVec4&
@@ -136,5 +146,12 @@ void ShaderErrorWindow(
 void DefaultEditorSelector(ImVec2, ImGuiEnum::DefaultEditor&, std::string&, bool&);
 
 void Barrier(ImVec2);
+
+bool MenuBar(
+	ID3D11DeviceContext* pContext,
+	ID3D11BlendState* pBlendStateEnabled,
+	ID3D11BlendState* pBlendStateDisabled,
+	DWORD& dwShaderFlags
+);
 
 float GetImGuiDeltaTime();
