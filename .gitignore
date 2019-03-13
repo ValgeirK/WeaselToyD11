@@ -9,10 +9,9 @@ x64
 /packages/WinPixEventRuntime.1.0.181027001
 
 
-/WeaselToyD11/imgui.ini
-/WeaselToyD11/settings.ini
 /Release
+
+/WeaselToyD11/ShaderToyLibrary/
 
 /WeaselToyD11/imgui.ini
 /WeaselToyD11/settings.ini
-/WeaselToyD11/ShaderToyLibrary/
