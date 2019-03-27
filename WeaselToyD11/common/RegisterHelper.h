@@ -2,6 +2,11 @@
 
 #include <string>
 
-bool GetStringRegKey(const int, const std::wstring&, std::wstring&, const std::wstring&);
+bool GetStringRegKey(
+	const int			id,
+	const std::wstring& strValueName,
+	std::wstring&		strValue,
+	const std::wstring& strStrDefaultValue
+);
 
-bool GetRenderDocLoc(std::wstring&);
+bool GetRenderDocLoc(std::wstring& strValue);

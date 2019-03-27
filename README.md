@@ -1,16 +1,16 @@
-########################################################################################
+========================================================================================
 					WeaselToy Direct11 ReadMe Instructions
 					Copyright Weaseltron Entertainment 2018
-########################################################################################
+========================================================================================
 
-=== PURPOSE ===
+## PURPOSE 
 
 WeaselToy is a windows application developed by Weaseltron Entertainment for prototyping
 and trying out pixel shaders.
 
 inspired by ShaderToy
 
-=== First Use ===
+## First Use
 
 -When starting for the first time, without a 'settings.ini' file, you get prompted with
  the option to insert the path to a text editor. If this is left empty it will default
@@ -22,7 +22,7 @@ inspired by ShaderToy
  'Resources' window. If there is a compile error in one of the pixel shaders then the
  'Shader Error Message' window will also be visible and displaying the compile error.
  
-=== Usage ===
+## Usage
 
 -The 'ShaderToy' window has 5 tabs at the top where you can change between the main
  scene or onto one of the other 4 buffers. 'Expand' fills out the application window with
@@ -80,19 +80,21 @@ inspired by ShaderToy
  section.
  It currently only supports floats and ints. But the input types are managed through
  comments in headers. The commands are:
-	x // input variableName step # 			( f.ex. // input colour step 0.1)
-	x // slider variableName min # max # 	( f.ex. // slider colour min -1.0 max 1.0)
-	x // colourEdit variableName			( f.ex. // colourEdit colour)
+	* // input variableName step # 			( f.ex. // input colour step 0.1)
+	* // slider variableName min # max # 	( f.ex. // slider colour min -1.0 max 1.0)
+	* // colourEdit variableName			( f.ex. // colourEdit colour)
 
  It allows colourEdit and colorEdit. The step, min and max values might not work if
  your variable is an int but you want the step to be a 0.1; If a variable is missing
  the comment headers, then it will be defaulted to the input type.
 
 
+-There is Renderdoc support, requiring Renderdoc version 1.2 or higher. If Renderdoc is not installed or the version is lower than 1.2 then the checkbox will get unchecked on startup. The Renderdoc dll gets linked on startup so adding it requires a restart of the program.
+
  
  
  
-=== Differences compared to ShaderToy.com ===
+## Differences compared to ShaderToy.com
 
 - Textures can be added. They just need to be int the textures directory
 - Customisable shader parameters
@@ -105,11 +107,7 @@ inspired by ShaderToy
  notation of float3(1.0).
 
 
-
--GLSL can multiply matrices and vectors together by using *, HLSL needs to use the 
- method mul()
-
-
+-GLSL has support for multiplying scalars/vectors/matrices, HLSL requires the use of mul().
 
 -ShaderToy samples textures using texture(iChannel0, ...), need to change this 
  according to the HLSL standard of tx0.Sample(iChannel0, ...)
@@ -130,7 +128,7 @@ inspired by ShaderToy
 		
  as the main function to draw, I am only using 
 
-		float4 main( PS_INPUT input ) : SV_Target
+		float4 mainImage( PS_INPUT input ) : SV_Target
 		
  switching this out and making sure that we are returning the color for the pixel 
  instead of setting it as the value of fragColor.

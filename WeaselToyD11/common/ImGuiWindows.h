@@ -1,9 +1,5 @@
 #pragma once
 
-//#include "../lib/imgui.h"
-//#include "../lib/imgui_impl_dx11.h"
-//#include "../lib/imgui_impl_win32.h"
-
 struct ImVec2;
 struct ImVec4;
 struct ID3D11Texture2D;
@@ -70,88 +66,96 @@ namespace ImGuiEnum
 
 
 void ControlWindow(
-	ID3D11Texture2D*,
-	Resource*,
-	ImVec4&,
-	ImVec4&,
-	Buffer*,
-	TextureLib*,
-	ImGuiEnum::DefaultEditor&,
-	ImGuiEnum::AspectRatio&,
-	ImGuiEnum::Resolution&,
-	DirectX::XMFLOAT4,
-	std::string&,
-	bool&, bool&,
-	float&, float&,
-	float, float,
-	int, int&,
-	bool&, bool&, bool&, bool,
-	bool&, bool&, bool&, bool&,
-	ImVec4&,
-	ImVec4&,
-	std::vector<CustomizableBuffer>&,
-	RENDERDOC_API_1_1_2**
+	ID3D11Texture2D*			pRenderTargetTexture,
+	Resource*					pResource,
+	ImVec4&						clearColour,
+	ImVec4&						clearColourFade,
+	Buffer*						pBuffer,
+	TextureLib*					pTextureLib,
+	ImGuiEnum::DefaultEditor&	defaultEditor,
+	ImGuiEnum::AspectRatio&		aspectRatio,
+	ImGuiEnum::Resolution&		resolution,
+	DirectX::XMFLOAT4			vMouse,
+	std::string& strProj,
+	bool& bPause, bool& bAutoReload,
+	float& fGameT, float& playSpeed,
+	float fDeltaT, float fScaling,
+	int iFrame, int iLocation, int& buttonPress,
+	bool& bResChanged, bool& bNewProj,
+	bool& bDefaultEditorSet, bool bIsFullwindow,
+	bool& bGoFullscreenChange, bool& bVsync,
+	bool& bGrabbing, bool& bRenderdoc,
+	ImVec4&						vWindowInfo,
+	ImVec4&						vMainWindowInfo,
+	std::vector<CustomizableBuffer>& vCustomizableBuffer,
+	RENDERDOC_API_1_1_2**		rdoc_api
 );
 
 void MainImageWindow(
-	ID3D11ShaderResourceView*,   
-	Resource*,
-	Buffer*,
-	ImVec2&,
-	ImVec2&,
-	ImVec2&,
-	ImVec2,
-	ImGuiWindowFlags&,
-	const char*,
-	std::string,
-	ImGuiEnum::DefaultEditor,
-	int*,
-	int&,
-	int,
-	float,
-	bool&,
-	bool&,
-	bool,
-	ImVec4&
+	ID3D11ShaderResourceView*	pShaderResourceView,
+	Resource*					pResource,
+	Buffer*						pBuffer,
+	ImVec2&						vWindowSize,
+	ImVec2&						vCurrentWindowSize,
+	ImVec2&						vMouse,
+	ImVec2						vPadding,
+	ImGuiWindowFlags&			windowFlags,
+	const char*					strProj,
+	std::string					strDefaultEditor,
+	ImGuiEnum::DefaultEditor	defaultEditor,
+	int*						piIsUsed,
+	int&						iLocation, 
+	int							iHovered,
+	float						fScaling,
+	bool&						bTrackMouse,
+	bool&						bExpandedImage,
+	bool						bResChanged,
+	ImVec4&						vWindowInfo
 );
 
 void ResourceWindow(
-	ID3D11Device*,
-	ID3D11DeviceContext*,
-	ID3D11VertexShader*,
-	Resource*,
-	Buffer*,
-	Channel*,
-	TextureLib*,
-	DWORD,
-	const char*,
-	float,
-	int*,
-	int&, int&, int&,
-	bool, bool&,
-	ImVec2,
-	ImVec4&
+	ID3D11Device*				pDevice,
+	ID3D11DeviceContext*		pContext,
+	ID3D11VertexShader*			pVertexShader,
+	Resource*					pResource,
+	Buffer*						pBuffer,
+	Channel*					pChannel,
+	TextureLib*					pTextureLib,
+	DWORD						dwShaderFlags,
+	const char*					strProj,
+	float						scaling,
+	int*						piBufferUsed,
+	int& iLocation, int& iPressIdentifier,
+	int&						iHovered,
+	bool bResChanged, bool& bProjChange,
+	ImVec2						vSize,
+	ImVec4&						vWindowInfo
 );
 
 void ShaderErrorWindow(
-	Buffer*, 
-	std::vector<std::string>,
-	std::string,
-	std::string,
-	ImGuiEnum::DefaultEditor, 
-	bool, 
-	ImVec4&
+	Buffer*						pBuffer,
+	std::vector<std::string>	mainErrors,
+	std::string					strProj,
+	std::string					strDefaultEditor,
+	ImGuiEnum::DefaultEditor	defaultEditor,
+	bool						bResChanged,
+	ImVec4&						vWindowInfo
 );
 
-void DefaultEditorSelector(ImVec2, ImGuiEnum::DefaultEditor&, std::string&, bool&);
+void DefaultEditorSelector(
+	ImVec2						pos,
+	ImGuiEnum::DefaultEditor&	defaultEditor,
+	std::string&				strDefaultEditor,
+	bool&						defaultEditorSelected
+);
 
 void Barrier(ImVec2);
 
 bool MenuBar(
-	ID3D11DeviceContext* pContext,
-	ID3D11BlendState* pBlendStateEnabled,
-	ID3D11BlendState* pBlendStateDisabled,
-	DWORD& dwShaderFlags
+	ID3D11DeviceContext*		pContext,
+	ID3D11BlendState*			pBlendStateEnabled,
+	ID3D11BlendState*			pBlendStateDisabled,
+	DWORD&						dwShaderFlags
 );
 
 float GetImGuiDeltaTime();

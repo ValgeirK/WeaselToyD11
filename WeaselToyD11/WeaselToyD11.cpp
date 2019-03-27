@@ -165,7 +165,7 @@ RENDERDOC_API_1_1_2*		g_rdoc_api = nullptr;
 
 
 std::vector<CustomizableBuffer>					g_vCustomizableBuffer;
-UINT											g_iCustomizableBufferSize = 0;
+UINT											g_uCustomizableBufferSize = 0;
 std::chrono::high_resolution_clock::time_point	g_tLastClick;
 
 
@@ -339,8 +339,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	if (g_bUseRenderdoc && GetRenderDocLoc(wPath))
 	{
 		std::string path(wPath.begin(), wPath.end());
-		
-		if (RenderdocCheck(path))
+
+		if (RenderdocVersionCheck(path))
 		{
 			HINSTANCE hinstLib;
 			hinstLib = LoadLibraryW(wPath.c_str());
@@ -359,7 +359,11 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				}
 			}
 		}
+		else
+			g_bUseRenderdoc = false;
 	}
+	else
+		g_bUseRenderdoc = false;
 
 	if (FAILED(InitWindow(hInstance, nCmdShow)))
 		return 0;
@@ -990,7 +994,7 @@ HRESULT InitDevice()
 	std::wstring g_strProjectW(g_strProject.length(), L' '); // Make room for characters
 	 // Copy string to wstring.
 	std::copy(g_strProject.begin(), g_strProject.end(), g_strProjectW.begin());
-	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", "vs_5_0", &pVSBlob, g_dwShaderFlags, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"./shaders/VertexShader.hlsl")).c_str()), "main", VS_SHADER_COMPILE_VER, &pVSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		SetForegroundWindow(g_hWnd);
@@ -1030,7 +1034,7 @@ HRESULT InitDevice()
 
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", PS_SHADER_COMPILE_VER, &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
@@ -1041,12 +1045,6 @@ HRESULT InitDevice()
 			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
-
-		SetForegroundWindow(g_hWnd);
-
-		// Trying without a pop-up box
-		//MessageBox(g_hWnd,
-		//	(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);
 	}
 
 	// Create the pixel shader
@@ -1116,13 +1114,13 @@ HRESULT InitDevice()
 	
 	InitResources(true);
 
-	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
+	ScanShaderForCustomizable(g_strProject.c_str(), std::string(PROJECT_PATH) + g_strProject + std::string("/shaders/PixelShader.hlsl"), g_vCustomizableBuffer);
 
-	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, std::vector<CustomizableBuffer>());
+	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_uCustomizableBufferSize);
 
 	Reflection::D3D11ShaderReflection(g_pPixelShaderReflection, g_Resource, g_dwShaderFlags);
 
-	bd.ByteWidth = (g_iCustomizableBufferSize / 16 + 1) * 16;
+	bd.ByteWidth = (g_uCustomizableBufferSize / FLOAT4_SIZE + 1) * FLOAT4_SIZE;
 	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
 	if (FAILED(hr))
 		return hr;
@@ -1199,13 +1197,14 @@ HRESULT InitResources(bool bLoadTextures)
 	if (!LoadChannels((std::string(PROJECT_PATH) + g_strProject + std::string("/channels/channels.txt")).c_str(), g_Channels, size))
 		return S_FALSE;
 
+	// Initialize all buffers
+	RECT rc;
+	GetClientRect(g_hWnd, &rc);
+	UINT width = rc.right - rc.left;
+	UINT height = rc.bottom - rc.top;
+
 	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
-		// Initialize all buffers
-		RECT rc;
-		GetClientRect(g_hWnd, &rc);
-		UINT width = rc.right - rc.left;
-		UINT height = rc.bottom - rc.top;
 
 		// Initialize buffer
 		g_Buffers[i].InitBuffer(g_pd3dDevice, g_pImmediateContext, g_pVertexShader, g_pTexturelib, g_dwShaderFlags, g_strProject.c_str(), g_piBufferUsed, width, height, i);
@@ -1235,7 +1234,7 @@ HRESULT InitResources(bool bLoadTextures)
 		}
 
 		// Create Sampler
-		CreateSampler(g_pd3dDevice, g_pImmediateContext, &g_Resource[i].m_pSampler, g_Channels[i], 0, i);
+		CreateSampler(g_pd3dDevice, &g_Resource[i].m_pSampler, g_Channels[i], 0, i);
 	}
 
 	return S_OK;
@@ -1254,13 +1253,13 @@ void Resize(const float width, const float height)
 		{
 			if (g_vPadding.x < width && g_vPadding.y < height && !g_bExpandedImage && !g_bFullWindow)
 			{
-				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
+				g_Buffers[i].ResizeTexture(g_pd3dDevice, (UINT)(width - g_vPadding.x), (UINT)(height - g_vPadding.y));
 
 				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width - g_vPadding.x, height - g_vPadding.y, 0.0f, 0.0f);
 			}
 			else
 			{
-				g_Buffers[i].ResizeTexture(g_pd3dDevice, g_pImmediateContext, (UINT)(width), (UINT)(height));
+				g_Buffers[i].ResizeTexture(g_pd3dDevice, (UINT)(width), (UINT)(height));
 
 				g_Buffers[i].m_BufferResolution = DirectX::XMFLOAT4(width, height, 0.0f, 0.0f);
 			}
@@ -1401,6 +1400,7 @@ void Render()
 
 	if (g_pTexturelib->m_bReload)
 	{
+		// Initialize all buffers
 		for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 		{
 			if (g_Resource[i].m_Type == Channels::ChannelType::E_Texture)
@@ -1409,7 +1409,8 @@ void Render()
 				g_pTexturelib->GetTexture(g_Resource[i].m_strTexture, &g_Resource[i].m_pShaderResource, g_Resource[i].m_vChannelRes);
 			}
 
-			g_Buffers->ReloadTexture(g_pTexturelib, i);
+			if (g_vMainImageWindow.z > 0 && g_vMainImageWindow.w > 0)
+				g_Buffers[i].ReloadTexture(g_pd3dDevice, g_pTexturelib, g_piBufferUsed, (int)(g_vMainImageWindow.z - g_vPadding.x), (int)(g_vMainImageWindow.w - g_vPadding.y));
 		}
 
 		g_pTexturelib->m_bReload = false;
@@ -1570,27 +1571,27 @@ void Render()
 
 	g_pImmediateContext->UpdateSubresource(g_pCBNeverChanges, 0, nullptr, &cbNC, 0, 0);
 
-	int allocSize = MEMORY_ALIGNINT(g_iCustomizableBufferSize, 4 * sizeof(float));
+	int allocSize = MEMORY_ALIGNINT(g_uCustomizableBufferSize, 4 * sizeof(float));
 	void* customizableBufferData = malloc(allocSize);
 
 	for (int i = 0; i < g_vCustomizableBuffer.size(); ++i)
 	{
-		if (g_vCustomizableBuffer[i].isDataSet)
+		if (g_vCustomizableBuffer[i].m_bIsDataSet)
 		{
-			if (g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT)
+			if (g_vCustomizableBuffer[i].m_iType == D3D_SVT_FLOAT)
 			{
-				for (int j = 0; j < g_vCustomizableBuffer[i].size / sizeof(float); ++j)
-					((float*)customizableBufferData)[g_vCustomizableBuffer[i].offset / sizeof(float) + j] = ((float*)g_vCustomizableBuffer[i].data)[j];
+				for (int j = 0; j < g_vCustomizableBuffer[i].m_iSize / sizeof(float); ++j)
+					((float*)customizableBufferData)[g_vCustomizableBuffer[i].m_uOffset / sizeof(float) + j] = ((float*)g_vCustomizableBuffer[i].m_pData)[j];
 			}
-			else if (g_vCustomizableBuffer[i].type == D3D_SVT_INT)
+			else if (g_vCustomizableBuffer[i].m_iType == D3D_SVT_INT)
 			{
-				for (int j = 0; j < g_vCustomizableBuffer[i].size / sizeof(int); ++j)
-					((int*)customizableBufferData)[g_vCustomizableBuffer[i].offset / sizeof(int) + j] = ((int*)g_vCustomizableBuffer[i].data)[j];
+				for (int j = 0; j < g_vCustomizableBuffer[i].m_iSize / sizeof(int); ++j)
+					((int*)customizableBufferData)[g_vCustomizableBuffer[i].m_uOffset / sizeof(int) + j] = ((int*)g_vCustomizableBuffer[i].m_pData)[j];
 			}
 			else
 			{
 				// Currently not supporting other types
-				assert(g_vCustomizableBuffer[i].type == D3D_SVT_FLOAT || g_vCustomizableBuffer[i].type == D3D_SVT_INT);
+				assert(g_vCustomizableBuffer[i].m_iType == D3D_SVT_FLOAT || g_vCustomizableBuffer[i].m_iType == D3D_SVT_INT);
 			}
 		}
 	}
@@ -1598,6 +1599,11 @@ void Render()
 
 	free(customizableBufferData);
 	customizableBufferData = nullptr;
+
+	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
+	{
+		g_pImmediateContext->PSSetSamplers(i, 1, &g_Resource[i].m_pSampler);
+	}
 
 	// Set constant buffers
 	g_pImmediateContext->PSSetConstantBuffers(2, 1, &g_pCBCustomizable);
@@ -1651,16 +1657,15 @@ void CleanupDevice()
 		g_pDepthStencilState->Release();
 
 		g_pImmediateContext->Release();
+
+		g_rdoc_api = nullptr;
 	}
 
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 
 	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
-		if (g_Buffers[i].m_bIsActive)
-		{
-			g_Buffers[i].Release(i);
-		}
+		g_Buffers[i].Terminate();
 
 		if (g_Resource[i].m_pSampler)
 			refs = g_Resource[i].m_pSampler->Release();
@@ -1707,9 +1712,11 @@ void CleanupDevice()
 	ImGui::DestroyContext();
 
 	// In case we aren't cleaning up correctly
-	/*ID3D11Debug *d3dDebug = nullptr;
-	g_pd3dDevice->QueryInterface(__uuidof(ID3D11Debug), (void**)&d3dDebug);
-	d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL);*/
+#ifdef _DEBUG
+	//ID3D11Debug *d3dDebug = nullptr;
+	//g_pd3dDevice->QueryInterface(__uuidof(ID3D11Debug), (void**)&d3dDebug);
+	//d3dDebug->ReportLiveDeviceObjects(D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL);
+#endif
 
 	SAFE_RELEASE(g_pd3dDevice);
 }
@@ -1749,7 +1756,7 @@ void ImGuiSetup(HINSTANCE hInstance)
 		g_bPause, g_bAutoReload,
 		g_fGameT, g_fPlaySpeed, 
 		g_fDeltaT, g_fDPIscale,
-		g_iFrame, buttonPress,
+		g_iFrame, g_iLocation, buttonPress,
 		g_bResChanged,
 		g_bNewProjLoaded,
 		g_bDefaultEditorSelected,
@@ -1903,15 +1910,7 @@ void ReloadShaders()
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
 	g_vShaderErrorList.clear();
-	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
-	if (FAILED(hr))
-	{
-		SetForegroundWindow(g_hWnd);
-		// Trying without a pop-up box
-		/*MessageBox(g_hWnd,
-			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);*/
-	}
-
+	hr = CompileShaderFromFile((path + std::wstring(L"/shaders/PixelShader.hlsl")).c_str(), "mainImage", PS_SHADER_COMPILE_VER, &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 
 	g_pPixelShader->Release();
 	g_pPixelShader = nullptr;
@@ -1920,9 +1919,8 @@ void ReloadShaders()
 	hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader);
 	if (FAILED(hr))
 	{
-		SetForegroundWindow(g_hWnd);
 		MessageBox(g_hWnd,
-			(LPCSTR)"Error creating pixel shader.", (LPCSTR)"Error", MB_OK);
+			(LPCSTR)"Error creating default pixel shader.", (LPCSTR)"Error", MB_OK);
 		return;
 	}
 
@@ -1946,21 +1944,13 @@ void ReloadShaders()
 	}
 
 	// Read the shader
-	ScanShaderForCustomizable(g_strProject.c_str(), g_vCustomizableBuffer);
+	ScanShaderForCustomizable(g_strProject.c_str(), std::string(PROJECT_PATH) + g_strProject + std::string("/shaders/PixelShader.hlsl"), g_vCustomizableBuffer);
 
-	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_iCustomizableBufferSize, customizableBufferCopy);
+	Reflection::D3D11ShaderReflectionAndPopulation(g_pPixelShaderReflection, g_vCustomizableBuffer, g_uCustomizableBufferSize, &customizableBufferCopy);
 
 	Reflection::D3D11ShaderReflection(g_pPixelShaderReflection, g_Resource, g_dwShaderFlags);
 
-	D3D11_BUFFER_DESC bd = {};
-
-	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = (g_iCustomizableBufferSize / 16 + 1) * 16;
-	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	bd.CPUAccessFlags = 0;
-
-	SAFE_RELEASE(g_pCBCustomizable);
-	hr = g_pd3dDevice->CreateBuffer(&bd, nullptr, &g_pCBCustomizable);
+	CreateCustomizableBuffer(g_pd3dDevice, &g_pCBCustomizable, g_uCustomizableBufferSize);
 
 	// Set the shaders
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
@@ -1996,7 +1986,7 @@ HRESULT LoadProject()
 	// Load new pixel shader
 	// Compile the pixel shader
 	ID3DBlob* pPSBlob = nullptr;
-	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", "ps_5_0", &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
+	hr = CompileShaderFromFile(((std::wstring(PROJECT_PATH_W) + g_strProjectW + std::wstring(L"/shaders/PixelShader.hlsl"))).c_str(), "mainImage", PS_SHADER_COMPILE_VER, &pPSBlob, g_dwShaderFlags, g_vShaderErrorList);
 	if (FAILED(hr))
 	{
 		if (HRESULT_CODE(hr) == ERROR_FILE_NOT_FOUND)
@@ -2007,11 +1997,6 @@ HRESULT LoadProject()
 			MessageBox(g_hWnd,
 				(LPCSTR)msg.c_str(), (LPCSTR)"Error", MB_OK);
 		}
-
-		SetForegroundWindow(g_hWnd);
-		// Trying without a pop-up box
-		/*MessageBox(g_hWnd,
-			(LPCSTR)"Error with the pixel shader.", (LPCSTR)"Error", MB_OK);*/
 	}
 
 	// Create the pixel shader
@@ -2023,8 +2008,7 @@ HRESULT LoadProject()
 
 	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
-		if (g_Buffers[i].m_bIsActive)
-			g_Buffers[i].Release(i);
+		g_Buffers[i].Terminate();
 
 		if (g_Resource[i].m_pSampler)
 			g_Resource[i].m_pSampler->Release();

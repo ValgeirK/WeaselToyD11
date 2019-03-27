@@ -13,8 +13,9 @@
 #include "Textures.h"
 #include "FileIO.h"
 #include "DDSTextureLoader.h"
+#include "HelperFunction.h"
 
-#define SINGLE_THREAD_LOADING false
+#define SINGLE_THREAD_LOADING true
 
 #define BUFFER_SIZE 20
 
@@ -30,10 +31,15 @@ struct LoadData
 
 struct TextureMemory
 {
+	typedef void (*TextureDeleteFunc)(void*);
+
 	uint8_t* ddsData;
 	const uint8_t* bitData;
 	size_t bitSize = 0;
 	const DirectX::DDS_HEADER* header;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	TextureDeleteFunc blockDestructor;
 
 	int id;
 } TEXTUREMEMORY;
@@ -42,17 +48,6 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam);
 DWORD WINAPI ThreadTextureLoader(LPVOID lpParam);
 
 std::vector< TextureMemory > filesLoaded;
-
-//TextureInfo
-//{
-//	FileName;
-//	SIZE_T;
-//
-//	num mips.
-//		flags;
-//	COMPRESSION;
-//};
-//arrayof(textureinfo);
 
 TextureLib::TextureLib() : m_iLength(0), m_iCapacity(1)
 {
@@ -103,9 +98,9 @@ void TextureLib::Add(const char* textPath)
 		
 		for (int i = 0; i < m_iCapacity; ++i)
 		{
-			temp[i] = new char[MAX_PATH];
-			memset(temp[i], 0, MAX_PATH);
-			strcpy_s(temp[i], MAX_PATH, m_ppPath[i]);
+			temp[i] = new char[MAX_PATH_LENGTH];
+			memset(temp[i], 0, MAX_PATH_LENGTH);
+			strcpy_s(temp[i], MAX_PATH_LENGTH, m_ppPath[i]);
 			delete[] m_ppPath[i];
 			tempSet[i] = m_pIsSet[i];
 		}
@@ -119,8 +114,8 @@ void TextureLib::Add(const char* textPath)
 
 		for (int i = 0; i < m_iCapacity / 2; ++i)
 		{
-			m_ppPath[i] = new char[MAX_PATH];
-			strcpy_s(m_ppPath[i], MAX_PATH, temp[i]);
+			m_ppPath[i] = new char[MAX_PATH_LENGTH];
+			strcpy_s(m_ppPath[i], MAX_PATH_LENGTH, temp[i]);
 			m_pIsSet[i] = tempSet[i];
 			delete[] temp[i];
 		}
@@ -129,10 +124,9 @@ void TextureLib::Add(const char* textPath)
 		delete[] tempSet;
 	}
 	
-	m_ppPath[m_iLength] = new char[MAX_PATH];
-	memset(m_ppPath[m_iLength], 0, MAX_PATH);
-	strncat(direct, textPath, strlen(textPath));
-	strcpy_s(m_ppPath[m_iLength], MAX_PATH, direct);
+	m_ppPath[m_iLength] = new char[MAX_PATH_LENGTH];
+	memset(m_ppPath[m_iLength], 0, MAX_PATH_LENGTH);
+	strcpy_s(m_ppPath[m_iLength], MAX_PATH_LENGTH, textPath);
 
 	m_pIsSet[m_iLength] = false;
 
@@ -187,67 +181,67 @@ void TextureLib::GetTexture(const char* desiredTex, ID3D11ShaderResourceView** s
 	m_bReload = true;
 }
 
-HRESULT TextureLib::LoadDefaultTexture(ID3D11Device* device)
+HRESULT TextureLib::InitializeViewsAndRes()
 {
 	HRESULT hr = S_OK;
-
-	const char* path = "default.dds";
-	Add(path);
 
 	m_pShaderResource = new ID3D11ShaderResourceView*[m_iLength] { nullptr };
 	m_pResolution = new DirectX::XMFLOAT4[m_iLength];
 
-	hr = LoadTexture(device, &m_pShaderResource[0], m_ppPath[0], m_pResolution[0]);
-
-	m_pIsSet[0] = true;
-
 	return hr;
 }
 
-HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* path)
+void TextureLib::FindTexturePaths(const char* path)
 {
-	// Starts by going through the texture directory and find all the textures with the .dds extension
-
-	HRESULT hr = S_OK;
-
 	WIN32_FIND_DATA data;
 	HANDLE hFind = FindFirstFile(path, &data);
 
 	if (hFind != INVALID_HANDLE_VALUE)
 	{
+		PIXBeginEvent(PIX_COLOR_INDEX((byte)4), "Finding Textures");
+
+		do
 		{
-			PIXBeginEvent(PIX_COLOR_INDEX((byte)4), "Finding Textures");
+			const char* fileName = data.cFileName;
+			std::string strPath = std::string(path);
 
-			do
+			// dwFileAttributes
+
+			if (data.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)
 			{
-				const char* fileName = data.cFileName;
+				// this could be a .dds texture
+				size_t length = strlen(fileName);
 
-				// dwFileAttributes
+				char ext[5];
+				memcpy(ext, &fileName[length - 4], 4);
+				ext[4] = '\0';
 
-				if (data.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)
+				// this is a .dds texture
+				Add(std::string(strPath.substr(0, strPath.length() - 1) + std::string(fileName)).c_str());
+			}
+			else if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			{
+				if (strcmp(fileName, ".") != 0 && strcmp(fileName, "..") != 0)
 				{
-					// this could be a .dds texture
-					size_t length = strlen(fileName);
-
-					char ext[5];
-					memcpy(ext, &fileName[length - 4], 4);
-					ext[4] = '\0';
-
-					if (strcmp(ext, ".dds") == 0)
-					{
-						// do not want to load the default texture again
-						if (strcmp(fileName, "default.dds") != 0)
-							// this is a .dds texture
-							Add(fileName);
-					}
+					FindTexturePaths(std::string(strPath.substr(0, strPath.length()-1) + std::string(fileName) + "/*").c_str());
 				}
-			} while (FindNextFile(hFind, &data));
-			FindClose(hFind);
-			PIXEndEvent(); // FINDINGTEXTURES
-		}
+			}
+		} while (FindNextFile(hFind, &data));
+		FindClose(hFind);
+		PIXEndEvent(); // FINDINGTEXTURES
 	}
+}
 
-	LoadDefaultTexture(device);
+HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* path)
+{
+	// Starts by going through the texture directory and find all the textures with the .dds extension
+	assert(device != nullptr);
+
+	HRESULT hr = S_OK;
+
+	FindTexturePaths(path);
+
+	InitializeViewsAndRes();
 
 	// If we have any textures then we want to load them
 	if (m_iLength > 0)
@@ -267,7 +261,7 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 
 #if SINGLE_THREAD_LOADING
 		// For single thread texture loading
-		//LoadTexturesSingleThread(device);
+		LoadTexturesSingleThread(device);
 
 #else
 		threadFileLoad = CreateThread(
@@ -301,43 +295,85 @@ HRESULT TextureLib::ParallelLoadDDSTextures(ID3D11Device* device, const char* pa
 /////////////////////////////////////////////////////////////
 
 
-void TextureLib::LoadTexturesSingleThread(ID3D11Device* device)
+void TextureLib::LoadTexturesSingleThread(ID3D11Device* pDevice)
 {
-	for (int i = 1; i < m_iLength; ++i)
+	assert(pDevice != nullptr);
+
+	for (int i = 0; i < m_iLength; ++i)
 	{
+		HRESULT hr = S_OK;
+
 		TextureMemory tm;
 
 		const size_t cSize = strlen(m_ppPath[i]) + 1;
 		wchar_t* path = new wchar_t[cSize];
 		mbstowcs(path, m_ppPath[i], cSize);
 
-		std::unique_ptr<uint8_t[]> ddsData;
-
-		LoadTextureFile(path, ddsData, &tm.header, &tm.bitData, &tm.bitSize);
-
-		//tm.ddsData = ddsData.release();
-		tm.id = i;
-
-		DirectX::CreateDDSTextureFromFileCustom(
-			device,
-			path,
-			const_cast<uint8_t*>(tm.bitData),
-			tm.header,
-			tm.bitData,
-			tm.bitSize,
-			nullptr,
-			&m_pShaderResource[tm.id]);
+		const char* pathExtension = "";
+		GetFileExtension(m_ppPath[i], &pathExtension);
 
 		uint32_t width = 0, height = 0;
-		DirectX::GetTextureInformation(path, width, height);
+
+		tm.id = i;
+		if (strcmp(pathExtension, "dds") == 0)
+		{
+			std::unique_ptr<uint8_t[]> ddsData;
+
+			LoadDDSTextureFile(path, ddsData, &tm.header, &tm.bitData, &tm.bitSize);
+
+			hr = DirectX::CreateDDSTextureFromFileCustom(
+				pDevice,
+				path,
+				const_cast<uint8_t*>(tm.bitData),
+				tm.header,
+				tm.bitData,
+				tm.bitSize,
+				nullptr,
+				&m_pShaderResource[tm.id]);
+
+			assert(SUCCEEDED(hr));
+
+			hr = DirectX::GetTextureInformation(path, width, height);
+
+			assert(SUCCEEDED(hr));
+
+			uint8_t* pDataPointer = ddsData.release();
+			delete pDataPointer;
+			pDataPointer = nullptr;
+		}
+		else
+		{
+			int nrChannels = 0;
+			void* pStbData = nullptr;
+			void * p32BitData = nullptr;
+
+			LoadStbTexture(m_ppPath[i], &pStbData, nrChannels, width, height);
+
+			assert(nrChannels == 3 || nrChannels == 4 && "Unhandled case");
+			assert(pStbData != nullptr);
+
+			if (nrChannels == 3)
+			{
+				// Need to add an alpha mask
+				p32BitData = AddAlphaMask(pStbData, width * height);
+				assert(p32BitData != nullptr);
+			}
+			else
+				p32BitData = pStbData;
+
+			// free up stb data
+			FreeStbTexture(pStbData);
+			pStbData = nullptr;
+
+			hr = CreateRbtTexture(pDevice, p32BitData, &m_pShaderResource[tm.id], width, height);
+			assert(SUCCEEDED(hr));
+
+			// free up the 32-bit data
+			delete[] p32BitData;
+		}
 
 		m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
-
 		m_pIsSet[tm.id] = true;
-
-		uint8_t* pDataPointer = ddsData.release();
-		delete pDataPointer;
-		pDataPointer = nullptr;
 
 		delete[] path;
 		path = nullptr;
@@ -352,7 +388,7 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 {
 	LoadData* data = (LoadData*)lpParam;
 
-	for (int i = 1; i < ((TextureLib*)data->textureLib)->m_iLength; ++i)
+	for (int i = 0; i < ((TextureLib*)data->textureLib)->m_iLength; ++i)
 	{
 		TextureMemory tm;
 
@@ -363,11 +399,50 @@ DWORD WINAPI ThreadFileLoader(LPVOID lpParam)
 		wchar_t* path = new wchar_t[cSize];
 		mbstowcs(path, ((TextureLib*)data->textureLib)->m_ppPath[i], cSize);
 
-		std::unique_ptr<uint8_t[]> ddsData;
+		const char* pathExtension = "";
+		GetFileExtension(((TextureLib*)data->textureLib)->m_ppPath[i], &pathExtension);
 
-		LoadTextureFile(path, ddsData, &tm.header, &tm.bitData, &tm.bitSize);
+		if (strcmp(pathExtension, "dds") == 0)
+		{
+			std::unique_ptr<uint8_t[]> ddsData;
 
-		tm.ddsData = ddsData.release();
+			LoadDDSTextureFile(path, ddsData, &tm.header, &tm.bitData, &tm.bitSize);
+			assert(tm.bitData != nullptr);
+
+			tm.ddsData = ddsData.release();
+		}
+		else
+		{
+			int nrChannels = 0;
+			void* pStbData = nullptr;
+			void* p32BitData = nullptr;
+			LoadStbTexture(((TextureLib*)data->textureLib)->m_ppPath[i], &pStbData, nrChannels, tm.width, tm.height);
+			
+			assert(pStbData != nullptr);
+			assert(tm.width > 0);
+			assert(tm.height > 0);
+			
+			assert(nrChannels == 3 || nrChannels == 4 && "Unsupported!");
+			if (nrChannels == 3)
+			{
+				// Need to add an alpha mask
+				p32BitData = AddAlphaMask(pStbData, tm.width * tm.height);
+				assert(p32BitData != nullptr);
+				tm.blockDestructor = &DeleteArrayWrapper;
+			}
+			else
+			{
+				p32BitData = pStbData;
+				tm.blockDestructor = &free;
+			}
+
+			FreeStbTexture(pStbData);
+			pStbData = nullptr;
+
+
+			tm.bitData = (uint8_t*)p32BitData;
+		}
+
 		tm.id = i;
 
 		// need critical section
@@ -403,7 +478,7 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 
 	TextureMemory tm;
 
-	int counter = 1;
+	int counter = 0;
 
 	while (true)
 	{
@@ -428,28 +503,44 @@ DWORD WINAPI ThreadTextureLoader(LPVOID lpParam)
 		wchar_t* path = new wchar_t[cSize];
 		mbstowcs(path, ((TextureLib*)data->textureLib)->m_ppPath[tm.id], cSize);
 
-		DirectX::CreateDDSTextureFromFileCustom(
-			data->device,
-			path,
-			const_cast<uint8_t*>(tm.bitData),
-			tm.header,
-			tm.bitData,
-			tm.bitSize,
-			nullptr,
-			&((TextureLib*)data->textureLib)->m_pShaderResource[tm.id]);
+		const char* pathExtension = "";
+		GetFileExtension(((TextureLib*)data->textureLib)->m_ppPath[tm.id], &pathExtension);
 
-		uint32_t width = 0, height = 0;
-		DirectX::GetTextureInformation(path, width, height);
+		if (strcmp(pathExtension, "dds") == 0)
+		{
+			DirectX::CreateDDSTextureFromFileCustom(
+				data->device,
+				path,
+				const_cast<uint8_t*>(tm.bitData),
+				tm.header,
+				tm.bitData,
+				tm.bitSize,
+				nullptr,
+				&((TextureLib*)data->textureLib)->m_pShaderResource[tm.id]);
 
-		((TextureLib*)data->textureLib)->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)width, (float)height, 0.0f, 0.0f);
+			assert(((TextureLib*)data->textureLib)->m_pShaderResource[tm.id] != nullptr);
+
+			DirectX::GetTextureInformation(path, tm.width, tm.height);
+
+			delete tm.ddsData;
+			tm.ddsData = nullptr;
+		}
+		else
+		{
+			CreateRbtTexture(data->device, (void*)tm.bitData, &((TextureLib*)data->textureLib)->m_pShaderResource[tm.id], tm.width, tm.height);
+			
+			assert(((TextureLib*)data->textureLib)->m_pShaderResource[tm.id] != nullptr);
+
+			// free up the 32-bit data
+			tm.blockDestructor((void*)tm.bitData);
+		}
+
+		((TextureLib*)data->textureLib)->m_pResolution[tm.id] = DirectX::XMFLOAT4((float)tm.width, (float)tm.height, 0.0f, 0.0f);
 
 		((TextureLib*)data->textureLib)->m_pIsSet[tm.id] = true;
 		counter++;
 
 		delete[] path;
-
-		delete tm.ddsData;
-		tm.ddsData = nullptr;
 
 		PIXEndEvent(); // THREAD_LOADTOSHADERVIEW
 

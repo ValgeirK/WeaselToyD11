@@ -125,6 +125,9 @@
     <ClInclude Include="common\Reflection.h">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="lib\stb_image.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="common">

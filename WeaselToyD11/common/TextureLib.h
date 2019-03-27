@@ -12,15 +12,12 @@ struct TextureLib
 	TextureLib();
 	~TextureLib();
 
-	void LoadTexturesSingleThread(ID3D11Device*);
+	void Add(const char* textPath);
 
-	void Add(const char*);
+	void GetTexture(const char* strDesiredTex, ID3D11ShaderResourceView** ppShaderRes);
+	void GetTexture(const char* strDesiredTex, ID3D11ShaderResourceView** ppShaderRes, DirectX::XMFLOAT4& rChannelRes);
 
-	void GetTexture(const char*, ID3D11ShaderResourceView**);
-	void GetTexture(const char*, ID3D11ShaderResourceView**, DirectX::XMFLOAT4&);
-
-	HRESULT ParallelLoadDDSTextures(ID3D11Device*, const char*);
-	HRESULT LoadDefaultTexture(ID3D11Device*);
+	HRESULT ParallelLoadDDSTextures(ID3D11Device* pDevice, const char* strPath);
 
 	char**						m_ppPath;
 	ID3D11ShaderResourceView**	m_pShaderResource;
@@ -31,4 +28,9 @@ struct TextureLib
 	bool						m_bReload = false;
 
 	LoadData*					m_pLoadData = nullptr;
+
+private:
+	void LoadTexturesSingleThread(ID3D11Device* pDevice);
+	void FindTexturePaths(const char* path);
+	HRESULT InitializeViewsAndRes();
 };

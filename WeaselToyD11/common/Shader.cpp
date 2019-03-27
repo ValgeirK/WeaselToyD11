@@ -66,10 +66,10 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
 	return S_OK;
 }
 
-HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableBuffer>& vCustomizableBuffer)
+HRESULT ScanShaderForCustomizable(const char* strProj, const std::string& strShaderPath, std::vector<CustomizableBuffer>& vCustomizableBuffer)
 {
 	// Open file
-	std::string path = std::string(PROJECT_PATH) + strProj + std::string("/shaders/PixelShader.hlsl");
+	std::string path = strShaderPath;
 	std::ifstream inputFile(path.c_str(), std::ios::in);
 
 	// Make sure the file was opened
@@ -81,34 +81,34 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 	vCustomizableBuffer.clear();
 
 	// Initialize variables
-	char line[MAX_PATH] = "";
-	char dummy[MAX_PATH] = "";
-	char dummy2[MAX_PATH] = "";
-	char dummy3[MAX_PATH] = "";
-	char bufferName[MAX_PATH] = "";
+	char line[MAX_PATH_LENGTH] = "";
+	char dummy[MAX_PATH_LENGTH] = "";
+	char dummy2[MAX_PATH_LENGTH] = "";
+	char dummy3[MAX_PATH_LENGTH] = "";
+	char bufferName[MAX_PATH_LENGTH] = "";
 
 	do
 	{
 		// Finding the line where the constant buffer is set
 		sscanf(line, "%s %s\n", &dummy, &bufferName);
-	} while (inputFile.getline(line, MAX_PATH) && strcmp(bufferName, "cbCustomisable") != 0);
+	} while (inputFile.getline(line, MAX_PATH_LENGTH) && strcmp(bufferName, "cbCustomisable") != 0);
 
 	// Skipping the line with the curly brackets
-	inputFile.getline(line, MAX_PATH);
+	inputFile.getline(line, MAX_PATH_LENGTH);
 
 	if (strcmp(bufferName, "cbCustomisable") != 0)
 		return S_OK;
 
 	do
 	{
-		char strCommand[MAX_PATH] = "";
+		char strCommand[MAX_PATH_LENGTH] = "";
 		float min = 0.0f;
 		float max = 1.0f;
 		float step = 1.0f;
-		char strVarName[MAX_PATH] = "";
-		char strMin[MAX_PATH] = "";
-		char strMax[MAX_PATH] = "";
-		char strStep[MAX_PATH] = "";
+		char strVarName[MAX_PATH_LENGTH] = "";
+		char strMin[MAX_PATH_LENGTH] = "";
+		char strMax[MAX_PATH_LENGTH] = "";
+		char strStep[MAX_PATH_LENGTH] = "";
 
 		CustomizableBuffer cb;
 
@@ -117,24 +117,24 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 		if (strcmp(strCommand, "slider") == 0)
 		{
 			sscanf(line, "%s %s %s %s %f %s %f \n", &dummy, &strCommand, &strVarName, &strMin, &min, &strMax, &max);
-			cb.min = min;
-			cb.max = max;
-			cb.step = step;
+			cb.m_fMin = min;
+			cb.m_fMax = max;
+			cb.m_fStep = step;
 
-			strcpy(cb.strCommand, strCommand);
-			strcpy(cb.strVariable, strVarName);
+			strcpy(cb.m_strCommand, strCommand);
+			strcpy(cb.m_strVariable, strVarName);
 
 			vCustomizableBuffer.push_back(cb);
 		}
 		else if (strcmp(strCommand, "input") == 0)
 		{
 			sscanf(line, "%s %s %s %s %f \n", &dummy, &strCommand, &strVarName, &strStep, &step);
-			cb.min = min;
-			cb.max = max;
-			cb.step = step;
+			cb.m_fMin = min;
+			cb.m_fMax = max;
+			cb.m_fStep = step;
 
-			strcpy(cb.strCommand, strCommand);
-			strcpy(cb.strVariable, strVarName);
+			strcpy(cb.m_strCommand, strCommand);
+			strcpy(cb.m_strVariable, strVarName);
 
 			vCustomizableBuffer.push_back(cb);
 		}
@@ -142,18 +142,18 @@ HRESULT ScanShaderForCustomizable(const char* strProj, std::vector<CustomizableB
 			|| strcmp(strCommand, "colourEdit") == 0)
 		{
 			sscanf(line, "%s %s %s \n", &dummy, &strCommand, &strVarName);
-			cb.min = min;
-			cb.max = max;
-			cb.step = step;
+			cb.m_fMin = min;
+			cb.m_fMax = max;
+			cb.m_fStep = step;
 
-			strcpy(cb.strCommand, strCommand);
-			strcpy(cb.strVariable, strVarName);
+			strcpy(cb.m_strCommand, strCommand);
+			strcpy(cb.m_strVariable, strVarName);
 
 			vCustomizableBuffer.push_back(cb);
 		}
 
 
-		inputFile.getline(line, MAX_PATH);
+		inputFile.getline(line, MAX_PATH_LENGTH);
 	} while (strcmp(dummy, "};") != 0);
 
 	return S_OK;

@@ -7,36 +7,36 @@
 struct ImVec4;
 
 bool LoadChannels(
-	const char* channelPath, 
-	Channel* channels, 
-	int& size
+	const char*			strChannelPath, 
+	Channel*			channels, 
+	int&				iSize
 );
 
 bool WriteChannel(
-	const char* channelPath, 
-	Channel* channels
+	const char*			strChannelPath, 
+	Channel*			pChannels
 );
 
 bool WriteIni(
-	const char* strProj, 
-	const char* strEditor, 
-	ImVec4 vColor, 
-	RECT vAppSize, 
-	DWORD shaderFlags, 
-	int iEditor, 
-	bool autoReload, 
-	bool bRenderdoc
+	const char*			strProj, 
+	const char*			strEditor, 
+	ImVec4				vColor, 
+	RECT				vAppSize, 
+	DWORD				shaderFlags, 
+	int					iEditor, 
+	bool				bAutoReload, 
+	bool				bRenderdoc
 );
 
 bool ReadIni(
-	std::string& strProj, 
-	std::string& strEditor, 
-	ImVec4& vColor, 
-	RECT& vAppSize, 
-	DWORD& shaderFlags, 
-	int& iEditor, 
-	bool& autoReload, 
-	bool& bRenderdoc
+	std::string&		strProj, 
+	std::string&		strEditor, 
+	ImVec4&				vColor, 
+	RECT&				vAppSize, 
+	DWORD&				shaderFlags, 
+	int&				iEditor, 
+	bool&				bAutoReload, 
+	bool&				bRenderdoc
 );
 
-bool RenderdocCheck(std::string dllLocation);
+bool RenderdocVersionCheck(std::string dllLocation);

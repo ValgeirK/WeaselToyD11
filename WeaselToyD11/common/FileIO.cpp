@@ -6,6 +6,9 @@
 
 #include <dxgiformat.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "../lib/stb_image.h"
+
 #include "DDSTextureLoader.h"
 
 const uint32_t DDS_MAGIC = 0x20534444; // "DDS "
@@ -31,7 +34,7 @@ typedef public std::unique_ptr<void, handle_closer> ScopedHandle;
 
 inline HANDLE safe_handle(HANDLE h) { return (h == INVALID_HANDLE_VALUE) ? nullptr : h; }
 
-HRESULT LoadTextureFile(const wchar_t * fileName, std::unique_ptr<uint8_t[]>& ddsData, const DirectX::DDS_HEADER ** header, const uint8_t ** bitData, size_t * bitSize)
+HRESULT LoadDDSTextureFile(const wchar_t * fileName, std::unique_ptr<uint8_t[]>& ddsData, const DirectX::DDS_HEADER ** header, const uint8_t ** bitData, size_t * bitSize)
 {
 	if (!header || !bitData || !bitSize)
 	{
@@ -144,4 +147,24 @@ HRESULT LoadTextureFile(const wchar_t * fileName, std::unique_ptr<uint8_t[]>& dd
 	*bitSize = fileInfo.EndOfFile.LowPart - offset;
 
 	return S_OK;
+}
+
+HRESULT LoadStbTexture(const char * imagepath, void** data, int&nrChannels, uint32_t& width, uint32_t& height)
+{
+	assert(strlen(imagepath) > 0);
+
+	*data = (void*)stbi_load(imagepath, (int*)&width, (int*)&height, &nrChannels, 0);
+
+	assert(*data != nullptr);
+	assert(width > 0);
+	assert(height > 0);
+	assert(nrChannels > 0);
+
+	return S_OK;
+}
+
+void FreeStbTexture(void* data)
+{
+	assert(data != nullptr);
+	stbi_image_free(data);
 }

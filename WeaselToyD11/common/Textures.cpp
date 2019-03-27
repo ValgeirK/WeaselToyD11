@@ -42,7 +42,6 @@ HRESULT LoadTexture(
 
 HRESULT CreateSampler(
 	ID3D11Device* pd3dDevice,
-	ID3D11DeviceContext* pImmediateContext,
 	ID3D11SamplerState** pSampler,
 	Channel channel,
 	const int location,
@@ -109,9 +108,6 @@ HRESULT CreateSampler(
 		break;
 	}
 
-	// Sampler
-	pImmediateContext->PSSetSamplers(index + 4* location, 1, pSampler);
-
 	return hr;
 }
 
@@ -123,6 +119,8 @@ HRESULT Create2DTexture(
 	const UINT width, const UINT height
 )
 {
+	assert(pd3dDevice != nullptr);
+
 	HRESULT hr = S_OK;
 
 	// 2D Texture
@@ -167,6 +165,7 @@ HRESULT Create2DTexture(
 
 	// Create the texture
 	hr = pd3dDevice->CreateTexture2D(&mTextureDesc, NULL, mRenderTargetTexture);
+	assert(mRenderTargetTexture != nullptr);
 
 	// Render Target
 	if (renderTarget)
@@ -207,6 +206,8 @@ HRESULT CreateDepthStencilView(
 	const UINT height
 	)
 {
+	assert(device != nullptr);
+
 	HRESULT hr = S_OK;
 
 	D3D11_TEXTURE2D_DESC depthStencilDesc;
@@ -255,6 +256,61 @@ HRESULT CreateDepthStencilView(
 	SetDebugObjectName(*texture2D, "DepthStencilBuffer");
 	SetDebugObjectName(*depthStencilView, "DepthStencilView");
 	SetDebugObjectName(*depthStencilState, "DepthStencilState");
+
+	return hr;
+}
+
+HRESULT CreateRbtTexture(ID3D11Device* pDevice, void* data, ID3D11ShaderResourceView** ppShaderResourceView, int iWidth, int iHeight)
+{
+	assert(pDevice != nullptr);
+
+	HRESULT hr = S_OK;
+
+	int mipCount = 1, arraySize = 1;
+	DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	D3D11_USAGE usage = D3D11_USAGE_DEFAULT;
+	UINT bindFlags = D3D11_BIND_SHADER_RESOURCE;
+	UINT cpuAccessFlags = 0;
+
+	D3D11_TEXTURE2D_DESC desc;
+	desc.Width = static_cast<UINT>(iWidth);
+	desc.Height = static_cast<UINT>(iHeight);
+	desc.MipLevels = static_cast<UINT>(mipCount);
+	desc.ArraySize = static_cast<UINT>(arraySize);
+	desc.Format = format;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.Usage = usage;
+	desc.BindFlags = bindFlags;
+	desc.CPUAccessFlags = cpuAccessFlags;
+
+	desc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA initData;
+	initData.pSysMem = data;
+	initData.SysMemPitch = iWidth * sizeof(UINT32);
+	initData.SysMemSlicePitch = 0;
+
+	ID3D11Texture2D* tex = nullptr;
+	hr = pDevice->CreateTexture2D(&desc, &initData, &tex);
+
+	assert(SUCCEEDED(hr));
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
+	SRVDesc.Format = format;
+
+	SRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	SRVDesc.Texture2D.MipLevels = mipCount;
+
+	hr = pDevice->CreateShaderResourceView(tex,	&SRVDesc, ppShaderResourceView);
+
+	assert(ppShaderResourceView != nullptr);
+
+	assert(SUCCEEDED(hr));
+
+	// Releasing the texture but we keep around the shader resource view, which is referencing it
+	// which keeps the texture active
+	tex->Release();
 
 	return hr;
 }

@@ -8,21 +8,21 @@
 #include "type/HashDefines.h"
 #include "type/ConstantBuffer.h"
 
-HRESULT Reflection::D3D11ReflectionSetup(ID3DBlob* pPSBlob, ID3D11ShaderReflection** pPixelShaderReflection)
+HRESULT Reflection::D3D11ReflectionSetup(ID3DBlob* pPSBlob, ID3D11ShaderReflection** ppPixelShaderReflection)
 {
 	assert(pPSBlob != nullptr);
 	HRESULT hr = S_OK;
 
-	hr = D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)pPixelShaderReflection);
+	hr = D3DReflect(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), IID_ID3D11ShaderReflection, (void**)ppPixelShaderReflection);
 
 	return hr;
 }
 
 void Reflection::D3D11ShaderReflectionAndPopulation(
-	ID3D11ShaderReflection* pPixelShaderReflection,
-	std::vector<CustomizableBuffer>& vCustomizableBuffer,
-	UINT& iCustomizableBufferSize,
-	std::vector<CustomizableBuffer> vCustomizableBufferCopy
+	ID3D11ShaderReflection*				pPixelShaderReflection,
+	std::vector<CustomizableBuffer>&	rvCustomizableBuffer,
+	UINT&								uCustomizableBufferSize,
+	std::vector<CustomizableBuffer>* 	pCustomizableBufferCopy
 )
 {
 	assert(pPixelShaderReflection != nullptr);
@@ -53,59 +53,62 @@ void Reflection::D3D11ShaderReflectionAndPopulation(
 
 				bool isFound = false;
 
-				for (int i = 0; i < vCustomizableBuffer.size(); ++i)
+				for (int i = 0; i < rvCustomizableBuffer.size(); ++i)
 				{
-					if (strcmp(varDesc.Name, vCustomizableBuffer[i].strVariable) == 0)
+					if (strcmp(varDesc.Name, rvCustomizableBuffer[i].m_strVariable) == 0)
 					{
 						// variable was found with a command in shader
-						iCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
-						vCustomizableBuffer[iVariables].offset = varDesc.StartOffset;
+						uCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
+						rvCustomizableBuffer[iVariables].m_uOffset = varDesc.StartOffset;
 
 						int copyIndex = -1;
 
-						for (int j = 0; j < vCustomizableBufferCopy.size(); ++j)
+						if (pCustomizableBufferCopy != nullptr)
 						{
-							if (strcmp(vCustomizableBufferCopy[j].strVariable, vCustomizableBuffer[i].strVariable) == 0 && vCustomizableBufferCopy[i].isDataSet)
+							for (int j = 0; j < pCustomizableBufferCopy->size(); ++j)
 							{
-								// we want to keep the values that have possibly been altered
-								vCustomizableBufferCopy[j].isDataSet = true;
-								copyIndex = j;
+								if (strcmp(pCustomizableBufferCopy->at(j).m_strVariable, rvCustomizableBuffer[i].m_strVariable) == 0 && pCustomizableBufferCopy->at(i).m_bIsDataSet)
+								{
+									// we want to keep the values that have possibly been altered
+									pCustomizableBufferCopy->at(j).m_bIsDataSet = true;
+									copyIndex = j;
+								}
 							}
 						}
 
 						if (typeDesc.Type == D3D_SVT_FLOAT)
 						{
-							vCustomizableBuffer[iVariables].data = new float[varDesc.Size / 4];
-							vCustomizableBuffer[iVariables].isDataSet = true;
+							rvCustomizableBuffer[iVariables].m_pData = new float[varDesc.Size / 4];
+							rvCustomizableBuffer[iVariables].m_bIsDataSet = true;
 
 							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 							{
 								if (copyIndex >= 0)
-									((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)(vCustomizableBufferCopy[copyIndex]).data)[i];
+									((float*)rvCustomizableBuffer[iVariables].m_pData)[i] = ((float*)(pCustomizableBufferCopy->at(copyIndex)).m_pData)[i];
 								else
 								{
 									if (varDesc.DefaultValue != nullptr)
-										((float*)vCustomizableBuffer[iVariables].data)[i] = ((float*)varDesc.DefaultValue)[i];
+										((float*)rvCustomizableBuffer[iVariables].m_pData)[i] = ((float*)varDesc.DefaultValue)[i];
 									else
-										((float*)vCustomizableBuffer[iVariables].data)[i] = 0.0f;
+										((float*)rvCustomizableBuffer[iVariables].m_pData)[i] = 0.0f;
 								}
 							}
 						}
 						else if (typeDesc.Type == D3D_SVT_INT)
 						{
-							vCustomizableBuffer[iVariables].data = new int[varDesc.Size / 4];
-							vCustomizableBuffer[iVariables].isDataSet = true;
+							rvCustomizableBuffer[iVariables].m_pData = new int[varDesc.Size / 4];
+							rvCustomizableBuffer[iVariables].m_bIsDataSet = true;
 
 							for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 							{
 								if (copyIndex >= 0)
-									((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)(vCustomizableBufferCopy[copyIndex]).data)[i];
+									((int*)rvCustomizableBuffer[iVariables].m_pData)[i] = ((int*)(pCustomizableBufferCopy->at(copyIndex)).m_pData)[i];
 								else
 								{
 									if (varDesc.DefaultValue != nullptr)
-										((int*)vCustomizableBuffer[iVariables].data)[i] = ((int*)varDesc.DefaultValue)[i];
+										((int*)rvCustomizableBuffer[iVariables].m_pData)[i] = ((int*)varDesc.DefaultValue)[i];
 									else
-										((int*)vCustomizableBuffer[iVariables].data)[i] = 0;
+										((int*)rvCustomizableBuffer[iVariables].m_pData)[i] = 0;
 								}
 							}
 						}
@@ -115,8 +118,8 @@ void Reflection::D3D11ShaderReflectionAndPopulation(
 							assert(typeDesc.Type == D3D_SVT_FLOAT || typeDesc.Type == D3D_SVT_INT);
 						}
 
-						vCustomizableBuffer[iVariables].type = static_cast<int>(typeDesc.Type);
-						vCustomizableBuffer[iVariables].size = varDesc.Size;
+						rvCustomizableBuffer[iVariables].m_iType = static_cast<int>(typeDesc.Type);
+						rvCustomizableBuffer[iVariables].m_iSize = varDesc.Size;
 
 						isFound = true;
 					}
@@ -125,54 +128,58 @@ void Reflection::D3D11ShaderReflectionAndPopulation(
 				if (!isFound)
 				{
 					// variable was not found with a command in the shader
-					iCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
+					uCustomizableBufferSize = varDesc.StartOffset + varDesc.Size;
 
 					CustomizableBuffer cb;
-					strcpy(cb.strCommand, "input");
-					strcpy(cb.strVariable, varDesc.Name);
-					cb.offset = varDesc.StartOffset;
-					cb.size = varDesc.Size;
+					strcpy(cb.m_strCommand, "input");
+					strcpy(cb.m_strVariable, varDesc.Name);
+					cb.m_uOffset = varDesc.StartOffset;
+					cb.m_iSize = varDesc.Size;
 
 					if (typeDesc.Type == D3D_SVT_FLOAT)
 					{
-						cb.data = new float[varDesc.Size / 4];
-						cb.isDataSet = true;
+						cb.m_pData = new float[varDesc.Size / 4];
+						cb.m_bIsDataSet = true;
 
 						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 						{
-							cb.step = 0.1f;
+							cb.m_fStep = 0.1f;
 							if ((float*)varDesc.DefaultValue == nullptr)
-								((float*)cb.data)[i] = 1.0f;
+								((float*)cb.m_pData)[i] = 1.0f;
 							else
-								((float*)cb.data)[i] = ((float*)varDesc.DefaultValue)[i];
+								((float*)cb.m_pData)[i] = ((float*)varDesc.DefaultValue)[i];
 						}
 					}
 					else if (typeDesc.Type == D3D_SVT_INT)
 					{
-						cb.data = new int[varDesc.Size / 4];
-						cb.isDataSet = true;
+						cb.m_pData = new int[varDesc.Size / 4];
+						cb.m_bIsDataSet = true;
 
 						for (unsigned int i = 0; i < varDesc.Size / 4; ++i)
 						{
-							cb.step = 1.0f;
+							cb.m_fStep = 1.0f;
 							if ((int*)varDesc.DefaultValue == nullptr)
-								((int*)cb.data)[i] = 1;
+								((int*)cb.m_pData)[i] = 1;
 							else
-								((int*)cb.data)[i] = ((int*)varDesc.DefaultValue)[i];
+								((int*)cb.m_pData)[i] = ((int*)varDesc.DefaultValue)[i];
 						}
 					}
-					cb.type = static_cast<int>(typeDesc.Type);
+					cb.m_iType = static_cast<int>(typeDesc.Type);
 
-					vCustomizableBuffer.push_back(cb);
+					rvCustomizableBuffer.push_back(cb);
 				}
 			}
 		}
 	}
 }
 
-void Reflection::D3D11ShaderReflection(ID3D11ShaderReflection* pPixelShaderReflection, Resource* pResource, DWORD dwShaderFlags)
+void Reflection::D3D11ShaderReflection(
+	ID3D11ShaderReflection*		pPixelShaderReflection, 
+	Resource*					pResource, 
+	DWORD						dwShaderFlags)
 {
 	assert(pPixelShaderReflection != nullptr);
+	assert(pResource != nullptr);
 
 	HRESULT hr;
 
@@ -181,18 +188,20 @@ void Reflection::D3D11ShaderReflection(ID3D11ShaderReflection* pPixelShaderRefle
 
 	int samplerCounter = 0;
 	int textureCounter = 0;
-	int samplerSlot[MAX_RESORCESCHANNELS] = {};
-	int textureSlot[MAX_RESORCESCHANNELS] = {};
+	int samplerSlot[MAX_RESORCESCHANNELS];
+	int textureSlot[MAX_RESORCESCHANNELS];
 
+	// Setting the normal values, which matches with the usual d3d11 setup of textures and samplers
 	for (int i = 0; i < MAX_RESORCESCHANNELS; ++i)
 	{
 		samplerSlot[i] = i;
 		textureSlot[i] = i;
 	}
 
+	// When we want backwards compatibility turned on we need to rearrange the texture and sampler bind slots
 	if (dwShaderFlags & D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY)
 	{
-		D3D11_SHADER_INPUT_BIND_DESC bindDescArray[128];
+		D3D11_SHADER_INPUT_BIND_DESC bindDescArray[D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT];
 		for (unsigned int param = 0; param < shaderReflectionDesc.BoundResources; ++param)
 		{
 			hr = pPixelShaderReflection->GetResourceBindingDesc(param, &(bindDescArray[param]));

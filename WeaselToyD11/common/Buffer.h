@@ -26,19 +26,61 @@ typedef long HRESULT;
 #include "type/Channel.h"
 #include "type/Resource.h"
 #include "type/HashDefines.h"
+#include "type/ConstantBuffer.h"
 
 class Buffer
 {
 public:
 	Buffer() : m_bIsActive(false) {};
 
-	HRESULT							InitBuffer(ID3D11Device*, ID3D11DeviceContext*, ID3D11VertexShader*, TextureLib*, DWORD, const char*, int*, const int, const int, int);
-	void							Render(Buffer*,ID3D11DeviceContext*, ID3D11DepthStencilView*, ID3D11Buffer*, const UINT, const UINT, const UINT, const int);
-	HRESULT							ReloadShader(ID3D11Device*, ID3D11VertexShader*, DWORD, const char*, const int);
-	void							ClearShaderResource(ID3D11DeviceContext*, ID3D11DepthStencilView*);
-	void							ResizeTexture(ID3D11Device*, ID3D11DeviceContext*, const UINT, const UINT);
-	void							ReloadTexture(TextureLib*, int);
-	void							Release(int);
+	HRESULT	InitBuffer(
+		ID3D11Device*			pd3dDevice,
+		ID3D11DeviceContext*	pImmediateContext,
+		ID3D11VertexShader*		pVertShader,
+		TextureLib*				pTextureLib,
+		DWORD					dwShaderFlag,
+		const char*				strProj,
+		int*					piBufferUsed,
+		const int				iWidth,
+		const int				iHeight,
+		int						iIndex
+	);
+	void Render(
+		Buffer*					pBuffers,
+		ID3D11DeviceContext*	pImmediateContext,
+		ID3D11DepthStencilView* pDepthStencilView,
+		ID3D11Buffer*			pCBNeverChanges,
+		const UINT				uIndexCount,
+		const UINT				uWidth,
+		const UINT				wHeight,
+		const int				iIndex
+	);
+	HRESULT	ReloadShader(
+		ID3D11Device*			pd3dDevice, 
+		ID3D11VertexShader*		pVertShader, 
+		DWORD					dwShaderFlag, 
+		const char*				strProj, 
+		const int				iIndex
+	);
+	void ClearShaderResource(
+		ID3D11DeviceContext*	pImmediateContext, 
+		ID3D11DepthStencilView* pDepthStencilView
+	);
+	void ResizeTexture(
+		ID3D11Device*			pDevice,
+		const UINT				uWidth, 
+		const UINT				uHeight
+	);
+	void ReloadTexture(
+		ID3D11Device*			pd3dDevice,
+		TextureLib*				pTextureLib,
+		int*					piBufferUsed,
+		const int				iWidth,
+		const int				iHeight
+	);
+	void Terminate();
+
+
 
 	bool							m_bIsActive = false;
 
@@ -46,6 +88,8 @@ public:
 	ID3D11ShaderResourceView*		m_ppShaderResourceViewCopy[MAX_RESORCESCHANNELS];
 
 	ID3D11ShaderResourceView*		m_pShaderResourceView = nullptr;
+
+	ID3D11Buffer*					m_pCBCustomizable = nullptr;
 
 	// Variables
 	DirectX::XMFLOAT4				m_BufferResolution;
@@ -66,4 +110,16 @@ public:
 	ID3D11RenderTargetView*			m_pRenderTargetView = nullptr;
 
 	bool							m_bResizeBuffer = false;
+
+	std::vector<CustomizableBuffer>	m_vCustomizableBuffer;
+	UINT							m_uCustomizableBufferSize = 0;
+
+private:
+	void LoadTextures(
+		ID3D11Device*			pd3dDevice,
+		TextureLib*				pTextureLib,
+		int*					piBufferUsed,
+		const int				iWidth,
+		const int				iHeight
+	);
 };

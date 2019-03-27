@@ -48,7 +48,7 @@ struct Channel
 	Channel(const char path[]) { strcpy(m_strTexture, path); };
 
 	Channels::ChannelType	m_Type;
-	char					m_strTexture[MAX_PATH];
+	char					m_strTexture[MAX_PATH_LENGTH];
 	Channels::FilterType	m_Filter;
 	Channels::WrapType		m_Wrap;
 	Channels::BufferId		m_BufferId;

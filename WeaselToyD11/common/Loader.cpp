@@ -67,10 +67,11 @@ bool LoadChannels(const char* channelPath, Channel* channels, int& size)
 				// Initialize variable for the texture path
 				char texturePath[50];
 
-				sscanf(line, "%s %s", &dummy, &texturePath);
+				int matches = sscanf(line, "%s %s", &dummy, &texturePath);
 
 				ch = Channel();
-				strncpy(ch.m_strTexture, texturePath, strlen(texturePath) + 1);
+				if(matches == 2)
+					strncpy(ch.m_strTexture, texturePath, strlen(texturePath) + 1);
 				i++;
 
 				break;
@@ -336,15 +337,15 @@ bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT&
 	}
 
 	// Initialize variables
-	char line[MAX_PATH] = "";
+	char line[MAX_PATH_LENGTH] = "";
 
-	char dummy[MAX_PATH] = "";
-	char proj[MAX_PATH] = "";
-	char editor[MAX_PATH] = "";
+	char dummy[MAX_PATH_LENGTH] = "";
+	char proj[MAX_PATH_LENGTH] = "";
+	char editor[MAX_PATH_LENGTH] = "";
 	int autRld = 1;
 	int useRenderdoc = 0;
 
-	while (inputFile.getline(line, MAX_PATH))
+	while (inputFile.getline(line, MAX_PATH_LENGTH))
 	{
 		sscanf(line, "%s", &dummy);
 
@@ -382,30 +383,53 @@ bool ReadIni(std::string& strProj, std::string& strEditor, ImVec4& vColor, RECT&
 	return true;
 }
 
-bool RenderdocCheck(std::string dllLocation)
+bool RenderdocVersionCheck(std::string szVersionFile)
 {
-	int substringEnd = dllLocation.find("renderdoc.dll");
+	// Checking dll file for version of renderdoc
+	DWORD  verHandle = 0;
+	UINT   size = 0;
+	LPBYTE lpBuffer = NULL;
+	DWORD  verSize = GetFileVersionInfoSize(szVersionFile.c_str(), &verHandle);
 
-	std::string path = dllLocation.substr(0, substringEnd);
-
-	path += std::string("renderdoc_app.h");
-
-	std::ifstream inputFile(path, std::ios::in);
-
-	char line[256];
-
-	while (inputFile.getline(line, 256))
+	if (verSize != NULL)
 	{
-		std::string check = std::string(line);
+		LPSTR verData = new char[verSize];
 
-		int isFound = check.find("API_1_3");
-		if (isFound >= 0)
+		if (GetFileVersionInfo(szVersionFile.c_str(), verHandle, verSize, verData))
 		{
-			inputFile.close();
-			return true;
+			if (VerQueryValue(verData, "\\", (VOID FAR* FAR*)&lpBuffer, &size))
+			{
+				if (size)
+				{
+					VS_FIXEDFILEINFO *verInfo = (VS_FIXEDFILEINFO *)lpBuffer;
+					if (verInfo->dwSignature == 0xfeef04bd)
+					{
+
+						// Doesn't matter if you are on 32 bit or 64 bit,
+						// DWORD is always 32 bits, so first two revision numbers
+						// come from dwFileVersionMS, last two come from dwFileVersionLS
+						int major = (verInfo->dwFileVersionMS >> 16) & 0xffff;
+						int minor = (verInfo->dwFileVersionMS >> 0) & 0xffff;
+						int build = (verInfo->dwFileVersionLS >> 16) & 0xffff;
+						int revision = (verInfo->dwFileVersionLS >> 0) & 0xffff;
+
+						_RPTF2(_CRT_WARN, "File Version: %d.%d.%d.%d\n",
+							(verInfo->dwFileVersionMS >> 16) & 0xffff,
+							(verInfo->dwFileVersionMS >> 0) & 0xffff,
+							(verInfo->dwFileVersionLS >> 16) & 0xffff,
+							(verInfo->dwFileVersionLS >> 0) & 0xffff
+						);
+						if (major >= 1 && minor >= 2)
+						{
+							delete[] verData;
+							return true;
+						}
+					}
+				}
+			}
 		}
+		delete[] verData;
 	}
 
-	inputFile.close();
 	return false;
 }

@@ -291,8 +291,12 @@ bool ImGuiFileDialog::FileDialog(const char* vName, std::string& vSelected, int 
 				}
 				else
 				{
-					vSelected = std::string("textures/" + infos.fileName);
-					m_SelectedFileName = infos.fileName;
+					int texPathLoc = m_CurrentPath.find("textures\\");
+					std::string textPath = m_CurrentPath.substr(texPathLoc, m_CurrentPath.length() - texPathLoc);
+					std::replace(textPath.begin(), textPath.end(), '\\', '/');
+
+					vSelected = std::string(textPath + "/" + infos.fileName);
+					m_SelectedFileName = vSelected;
 					ResetBuffer(FileNameBuffer);
 					AppendToBuffer(FileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, m_SelectedFileName);
 				}
@@ -304,7 +308,11 @@ bool ImGuiFileDialog::FileDialog(const char* vName, std::string& vSelected, int 
 				ImGuiIO& io = ImGui::GetIO();
 				ImVec2 pos = ImGui::GetCursorScreenPos();
 
-				pTextureLib->GetTexture(std::string("textures/" + infos.fileName).c_str(), &mShaderResourceView);
+				int texPathLoc = m_CurrentPath.find("textures");
+				std::string textPath = m_CurrentPath.substr(texPathLoc, m_CurrentPath.length() - texPathLoc);
+				std::replace(textPath.begin(), textPath.end(), '\\', '/');
+
+				pTextureLib->GetTexture(std::string(textPath + "/" + infos.fileName).c_str(), &mShaderResourceView);
 
 				ImGui::BeginTooltip();
 				ImGui::Image(mShaderResourceView, ImVec2((float)peakWidth, (float)peakHeight), ImVec2(0, 0), ImVec2(1, 1), ImColor(255, 255, 255, 255), ImColor(255, 255, 255, 128));

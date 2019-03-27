@@ -602,77 +602,80 @@ void CustomizableArea(
 {
 	for (int i = 0; i < vCustomizableBuffer.size(); ++i)
 	{
+		// We can't have a case below for both sizes
+		assert(sizeof(int) == sizeof(float));
 
-		switch (vCustomizableBuffer[i].size)
+		switch (vCustomizableBuffer[i].m_iSize)
 		{
-		case 4:
-			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			case sizeof(int) :
+//			case sizeof(float) :
+			if (vCustomizableBuffer[i].m_iType == 3) // FLOAT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderFloat(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputFloat(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].step);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderFloat(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, vCustomizableBuffer[i].m_fMin, vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputFloat(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, vCustomizableBuffer[i].m_fStep);
 			}
-			else if (vCustomizableBuffer[i].type == 2) // INT
+			else if (vCustomizableBuffer[i].m_iType == 2) // INT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderInt(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputInt(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].step);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderInt(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, (int)vCustomizableBuffer[i].m_fMin, (int)vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputInt(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, (int)vCustomizableBuffer[i].m_fStep);
 			}
 			break;
 		case 8:
-			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			if (vCustomizableBuffer[i].m_iType == 3) // FLOAT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderFloat2(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputFloat2(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderFloat2(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, vCustomizableBuffer[i].m_fMin, vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputFloat2(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, 3);
 			}
-			else if (vCustomizableBuffer[i].type == 2) // INT
+			else if (vCustomizableBuffer[i].m_iType == 2) // INT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderInt2(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputInt2(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderInt2(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, (int)vCustomizableBuffer[i].m_fMin, (int)vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputInt2(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, 3);
 			}
 			break;
 		case 12:
-			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			if (vCustomizableBuffer[i].m_iType == 3) // FLOAT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderFloat3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputFloat3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "colorEdit") == 0 
-					|| strcmp(vCustomizableBuffer[i].strCommand, "colourEdit") == 0)
-					ImGui::ColorEdit3(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderFloat3(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, vCustomizableBuffer[i].m_fMin, vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputFloat3(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, 3);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "colorEdit") == 0
+					|| strcmp(vCustomizableBuffer[i].m_strCommand, "colourEdit") == 0)
+					ImGui::ColorEdit3(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData);
 			}
-			else if (vCustomizableBuffer[i].type == 2) // INT
+			else if (vCustomizableBuffer[i].m_iType == 2) // INT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderInt3(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputInt3(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderInt3(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, (int)vCustomizableBuffer[i].m_fMin, (int)vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputInt3(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, 3);
 			}
 			break;
 		case 16:
-			if (vCustomizableBuffer[i].type == 3) // FLOAT
+			if (vCustomizableBuffer[i].m_iType == 3) // FLOAT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderFloat4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, vCustomizableBuffer[i].min, vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputFloat4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data, 3);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "colorEdit") == 0
-					|| strcmp(vCustomizableBuffer[i].strCommand, "colourEdit") == 0)
-					ImGui::ColorEdit4(vCustomizableBuffer[i].strVariable, (float*)vCustomizableBuffer[i].data);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderFloat4(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, vCustomizableBuffer[i].m_fMin, vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputFloat4(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData, 3);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "colorEdit") == 0
+					|| strcmp(vCustomizableBuffer[i].m_strCommand, "colourEdit") == 0)
+					ImGui::ColorEdit4(vCustomizableBuffer[i].m_strVariable, (float*)vCustomizableBuffer[i].m_pData);
 			}
-			else if (vCustomizableBuffer[i].type == 2) // INT
+			else if (vCustomizableBuffer[i].m_iType == 2) // INT
 			{
-				if (strcmp(vCustomizableBuffer[i].strCommand, "slider") == 0)
-					ImGui::SliderInt4(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, (int)vCustomizableBuffer[i].min, (int)vCustomizableBuffer[i].max);
-				else if (strcmp(vCustomizableBuffer[i].strCommand, "input") == 0)
-					ImGui::InputInt4(vCustomizableBuffer[i].strVariable, (int*)vCustomizableBuffer[i].data, 3);
+				if (strcmp(vCustomizableBuffer[i].m_strCommand, "slider") == 0)
+					ImGui::SliderInt4(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, (int)vCustomizableBuffer[i].m_fMin, (int)vCustomizableBuffer[i].m_fMax);
+				else if (strcmp(vCustomizableBuffer[i].m_strCommand, "input") == 0)
+					ImGui::InputInt4(vCustomizableBuffer[i].m_strVariable, (int*)vCustomizableBuffer[i].m_pData, 3);
 			}
 			break;
 		}
@@ -699,7 +702,7 @@ void ControlWindow(
 	bool& bPause, bool& bAutoReload,
 	float& fGameT, float& playSpeed, 
 	float fDeltaT, float fScaling,
-	int iFrame, int& buttonPress,
+	int iFrame, int iLocation, int& buttonPress,
 	bool& bResChanged, bool& bNewProj,
 	bool& bDefaultEditorSet, bool bIsFullwindow,
 	bool& bGoFullscreenChange, bool& bVsync, 
@@ -932,10 +935,21 @@ void ControlWindow(
 
 	ImGui::Separator();
 
-	if (vCustomizableBuffer.size() > 0)
+	if (iLocation == 0)
 	{
-		ImGui::Text("Customisable Shader Parameters:");
-		CustomizableArea(vCustomizableBuffer);
+		if (vCustomizableBuffer.size() > 0)
+		{
+			ImGui::Text("Customisable Shader Parameters:");
+			CustomizableArea(vCustomizableBuffer);
+		}
+	}
+	else
+	{
+		if (pBuffer[iLocation - 1].m_vCustomizableBuffer.size() > 0)
+		{
+			ImGui::Text("Customisable Shader Parameters:");
+			CustomizableArea(pBuffer[iLocation - 1].m_vCustomizableBuffer);
+		}
 	}
 
 	ImGui::Separator();
@@ -1221,13 +1235,11 @@ void SamplerSelection(
 
 		if (iLocation == 0)
 		{
-			strcpy(pChannel[iResource - 1].m_strTexture, "textures/default.dds");
 			path = path + std::string(strProj) + std::string("\\channels\\channels.txt");
 			WriteChannel(path.c_str(), pChannel);
 		}
 		else
 		{
-			strcpy(pBuffer[iLocation - 1].m_Channels[iResource - 1].m_strTexture, "textures/default.dds");
 			ChannelPathSwitchLookup(path, strProj, iLocation - 1);
 			WriteChannel(path.c_str(), pBuffer[iLocation - 1].m_Channels);
 		}
@@ -1253,6 +1265,10 @@ void ResourceWindow(
 	ImVec4& vWindowInfo
 )
 {
+	assert(pDevice != nullptr);
+	assert(pContext != nullptr);
+	assert(pVertexShader != nullptr);
+
 	ImGui::Begin("Resources");
 	
 	// Resize and scaling
@@ -1536,14 +1552,12 @@ void ResourceWindow(
 		static bool newTexture = false;
 		std::string fileName = "";
 
-		if (ImGuiFileDialog::Instance(pTextureLib)->FileDialog("Choose File", selected, iLocation, ".dds\0", ".\\textures", ""))
+		if (ImGuiFileDialog::Instance(pTextureLib)->FileDialog("Choose File", selected, iLocation, "\0", ".\\textures", ""))
 		{
 			if (ImGuiFileDialog::Instance(pTextureLib)->IsOk == true)
 			{
 				fileName = ImGuiFileDialog::Instance(pTextureLib)->GetCurrentFileName();
 				ImGuiFileDialog::Instance(pTextureLib)->Clear();
-
-				fileName = std::string("textures/" + fileName);
 			}
 			else
 			{
@@ -1614,6 +1628,8 @@ void ShaderErrorWindow(
 	ImVec4& vWindowInfo
 )
 {
+	assert(pBuffer != nullptr);
+
 	ImGui::Begin("Shader Error Messages");
 
 	if (bResChanged)
@@ -1648,7 +1664,11 @@ void ShaderErrorWindow(
 	ImGui::End();
 }
 
-void DefaultEditorSelector(ImVec2 pos, ImGuiEnum::DefaultEditor& defaultEditor, std::string& strDefaultEditor, bool& defaultEditorSelected)
+void DefaultEditorSelector(
+	ImVec2						pos, 
+	ImGuiEnum::DefaultEditor&	defaultEditor, 
+	std::string&				strDefaultEditor, 
+	bool&						defaultEditorSelected)
 {
 	ImGui::Begin("Select Default Editor");
 
@@ -1659,10 +1679,10 @@ void DefaultEditorSelector(ImVec2 pos, ImGuiEnum::DefaultEditor& defaultEditor, 
 
 	ImVec2 windowSize = ImGui::GetWindowSize();
 	
-	static char wc[MAX_PATH];
+	static char wc[MAX_PATH_LENGTH];
 
 	ImGui::PushItemWidth(windowSize.x);
-	ImGui::InputText("Location:", wc, MAX_PATH);
+	ImGui::InputText("Location:", wc, MAX_PATH_LENGTH);
 	ImGui::PopItemWidth(); 
 
 	ImGui::PushItemWidth(100.0f);
@@ -1729,12 +1749,14 @@ void ShaderCompileItem(const char* strFlag, DWORD flag, DWORD oldFlags, DWORD& s
 }
 
 bool MenuBar(
-	ID3D11DeviceContext* pContext,
-	ID3D11BlendState* pBlendStateEnabled,
-	ID3D11BlendState* pBlendStateDisabled,
-	DWORD& dwShaderFlags
+	ID3D11DeviceContext*		pContext,
+	ID3D11BlendState*			pBlendStateEnabled,
+	ID3D11BlendState*			pBlendStateDisabled,
+	DWORD&						dwShaderFlags
 )
 {
+	assert(pContext != nullptr);
+
 	DWORD shaderFlagCopy = dwShaderFlags;
 	static bool blendEnabled = false;
 

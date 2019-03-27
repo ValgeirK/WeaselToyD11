@@ -18,7 +18,9 @@
 #include <algorithm>
 #include <iterator>
 
+#include "type/HashDefines.h"
 #include "HelperFunction.h"
+#include "FileIO.h"
 
 void SetDebugObjectName(ID3D11DeviceChild* pResource, const char * pName)
 {
@@ -103,4 +105,69 @@ void DefaultEditorStrFix(std::string& str)
 	}
 
 	str = newStr + word;
+}
+
+HRESULT CreateCustomizableBuffer(ID3D11Device* pDevice, ID3D11Buffer** ppBuffer, UINT uBufferSize)
+{
+	assert(pDevice != nullptr);
+
+	D3D11_BUFFER_DESC bd = {};
+	
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = (uBufferSize / FLOAT4_SIZE + 1) * FLOAT4_SIZE;
+	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	bd.CPUAccessFlags = 0;
+
+	SAFE_RELEASE((*ppBuffer));
+	return pDevice->CreateBuffer(&bd, nullptr, ppBuffer);
+}
+
+void GetFileExtension(const char* strPath, const char** strExtension)
+{
+	assert(strlen(strPath) > 3);
+	assert(*strExtension != nullptr);
+
+	// Return the extension if one exists
+	size_t pathLen = strlen(strPath);
+
+	for (int i = (int)pathLen - 3; i > 0; --i)
+	{
+		if (strPath[i] == '.')
+		{
+			*strExtension = &strPath[i + 1];
+			return;
+		}
+	}
+	// We should never get here
+	assert(false);
+}
+
+void* AddAlphaMask(void* pData, int iTextureSize)
+{
+	assert(pData != nullptr);
+	assert(iTextureSize > 0);
+
+	// We want a texture with 4 channels
+	int newTextureSize = iTextureSize * 4;
+	
+	void* maskedData = (void*)(new char[newTextureSize]);
+
+	int oldCounter = 0;
+
+	for (int i = 0; i < newTextureSize;)
+	{
+		((unsigned char*)maskedData)[i++] = ((unsigned char*)pData)[oldCounter++];
+		((unsigned char*)maskedData)[i++] = ((unsigned char*)pData)[oldCounter++];
+		((unsigned char*)maskedData)[i++] = ((unsigned char*)pData)[oldCounter++];
+		((unsigned char*)maskedData)[i++] = 255;
+	}
+
+	return maskedData;
+}
+
+void DeleteArrayWrapper(void* block)
+{
+	// Wrapping the delete[] to have a function
+	assert(block != nullptr);
+	delete[] block;
 }

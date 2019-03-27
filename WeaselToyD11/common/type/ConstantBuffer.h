@@ -33,53 +33,53 @@ struct CustomizableBuffer
 {
 	CustomizableBuffer()
 	{
-		data = nullptr;
+		m_pData = nullptr;
 
-		min = -1;
-		max = -1;
-		step = -1;
+		m_fMin = -1;
+		m_fMax = -1;
+		m_fStep = -1;
 	}
 
 	CustomizableBuffer(const CustomizableBuffer& cb)
 	{
-		strcpy(strCommand, cb.strCommand);
-		strcpy(strVariable, cb.strVariable);
+		strcpy(m_strCommand, cb.m_strCommand);
+		strcpy(m_strVariable, cb.m_strVariable);
 
-		offset = cb.offset;
-		type = cb.type;
-		size = cb.size;
-		min = cb.min;
-		max = cb.max;
-		step = cb.step;
-		isDataSet = cb.isDataSet;
+		m_uOffset = cb.m_uOffset;
+		m_iType = cb.m_iType;
+		m_iSize = cb.m_iSize;
+		m_fMin = cb.m_fMin;
+		m_fMax = cb.m_fMax;
+		m_fStep = cb.m_fStep;
+		m_bIsDataSet = cb.m_bIsDataSet;
 
-		if (type == 2) // INT
+		if (m_iType == 2) // INT
 		{
-			data = new int[size / sizeof(int)];
+			m_pData = new int[m_iSize / sizeof(int)];
 
-			for (int i = 0; i < size / sizeof(int); ++i)
-				((int*)data)[i] = ((int*)cb.data)[i];
+			for (int i = 0; i < m_iSize / sizeof(int); ++i)
+				((int*)m_pData)[i] = ((int*)cb.m_pData)[i];
 		}
-		else if (type == 3) // FLOAT
+		else if (m_iType == 3) // FLOAT
 		{
-			data = new float[size / sizeof(float)];
+			m_pData = new float[m_iSize / sizeof(float)];
 
-			for (int i = 0; i < size / sizeof(float); ++i)
-				((float*)data)[i] = ((float*)cb.data)[i];
+			for (int i = 0; i < m_iSize / sizeof(float); ++i)
+				((float*)m_pData)[i] = ((float*)cb.m_pData)[i];
 		}
 	}
 
-	void* data;
+	void*		m_pData;
 
-	char strCommand[MAX_PATH];
-	char strVariable[MAX_PATH];
+	char		m_strCommand[MAX_PATH_LENGTH];
+	char		m_strVariable[MAX_PATH_LENGTH];
 
-	UINT offset;
-	int type;
-	int size;
-	float min;
-	float max;
-	float step;
+	UINT		m_uOffset;
+	int			m_iType;
+	int			m_iSize;
+	float		m_fMin;
+	float		m_fMax;
+	float		m_fStep;
 
-	bool isDataSet = false;
+	bool		m_bIsDataSet = false;
 };

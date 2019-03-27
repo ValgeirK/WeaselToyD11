@@ -16,7 +16,6 @@ HRESULT LoadTexture(
 
 HRESULT CreateSampler(
 	ID3D11Device*,
-	ID3D11DeviceContext*,
 	ID3D11SamplerState**,
 	Channel,
 	const int,
@@ -39,4 +38,12 @@ HRESULT CreateDepthStencilView(
 	ID3D11Texture2D**,
 	const UINT,
 	const UINT
+);
+
+HRESULT CreateRbtTexture(
+	ID3D11Device* pDevice, 
+	void* data, 
+	ID3D11ShaderResourceView** ppShaderResourceView, 
+	int iWidth, 
+	int iHeight
 );
