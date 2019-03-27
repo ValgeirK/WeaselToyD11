@@ -1,6 +1,6 @@
 					WeaselToy Direct11 ReadMe Instructions
 					Copyright Weaseltron Entertainment 2018
-========================================================================================
+=======
 
 ## PURPOSE 
 
